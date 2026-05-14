@@ -74,10 +74,15 @@ function Get-FolderSize {
     }
 
     try {
-        $measurement = Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction Stop |
-            Measure-Object -Property Length -Sum
+        $files = Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction SilentlyContinue
+        
+        if ($null -eq $files -or @($files).Count -eq 0) {
+            return [long]0
+        }
 
-        if ($null -eq $measurement.Sum) {
+        $measurement = $files | Measure-Object -Property Length -Sum
+
+        if ($null -eq $measurement -or $null -eq $measurement.Sum) {
             return [long]0
         }
 

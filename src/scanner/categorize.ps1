@@ -17,21 +17,30 @@
 function Initialize-Rules {
     <#
     .SYNOPSIS Loads and validates the rules file
-    .PARAMETER RulesFile Path to default-rules.json
+    .PARAMETER ConfigPath Path to default-rules.json
     .OUTPUTS [PSCustomObject] Parsed rules object
     .THROWS Terminates with error message if file missing or invalid JSON
     #>
-    param([string]$RulesFile)
+    param(
+        [Alias("RulesFile")]
+        [string]$ConfigPath
+    )
+
+    # Validate parameter is not empty
+    if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+        Write-Host "❌ Path file aturan tidak boleh kosong." -ForegroundColor Red
+        exit 1
+    }
 
     # Check if rules file exists
-    if (-not (Test-Path $RulesFile)) {
-        Write-Host "❌ File aturan tidak ditemukan: $RulesFile" -ForegroundColor Red
+    if (-not (Test-Path $ConfigPath)) {
+        Write-Host "❌ File aturan tidak ditemukan: $ConfigPath" -ForegroundColor Red
         exit 1
     }
 
     # Read and parse JSON
     try {
-        $content = Get-Content $RulesFile -Raw -Encoding UTF8
+        $content = Get-Content $ConfigPath -Raw -Encoding UTF8
         $rules = $content | ConvertFrom-Json
     } catch {
         Write-Host "❌ File aturan rusak (JSON tidak valid)." -ForegroundColor Red
