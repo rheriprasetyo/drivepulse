@@ -303,6 +303,8 @@ function Show-MainMenu {
     # Rules file path (src/ui/../../config/default-rules.json = project root/config/default-rules.json)
     $rulesFile = "$PSScriptRoot\..\..\config\default-rules.json"
 
+    $exitMenu = $false
+
     do {
         # Display banner/header
         Write-Host ""
@@ -322,6 +324,12 @@ function Show-MainMenu {
         # Read user input
         $choice = Read-Host "  Pilih menu (1-4)"
 
+        # Handle null/empty input (non-interactive or piped input exhausted)
+        if ([string]::IsNullOrWhiteSpace($choice)) {
+            $exitMenu = $true
+            continue
+        }
+
         switch ($choice) {
             "1" {
                 # Quick Scan
@@ -330,7 +338,7 @@ function Show-MainMenu {
                 Write-Host ""
 
                 # Initialize rules
-                $rules = Initialize-Rules -RulesFile $rulesFile
+                $rules = Initialize-Rules -ConfigPath $rulesFile
 
                 # Define progress callback for Quick Scan
                 $progressCb = {
@@ -368,7 +376,7 @@ function Show-MainMenu {
                 Write-Host ""
 
                 # Initialize rules
-                $rules = Initialize-Rules -RulesFile $rulesFile
+                $rules = Initialize-Rules -ConfigPath $rulesFile
 
                 # Define progress callback for Deep Scan
                 $progressCb = {
@@ -434,7 +442,7 @@ function Show-MainMenu {
                 Write-Host ""
                 Write-Host "  Terima kasih sudah pakai DrivePulse! Sampai jumpa." -ForegroundColor Green
                 Write-Host ""
-                return
+                $exitMenu = $true
             }
             default {
                 # Invalid input
@@ -443,5 +451,5 @@ function Show-MainMenu {
                 Write-Host ""
             }
         }
-    } while ($true)
+    } while (-not $exitMenu)
 }
