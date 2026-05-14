@@ -1,0 +1,130 @@
+{
+  "_schema": "DrivePulse categorization rules",
+  "version": "1.0",
+  "description": "Aturan default untuk kategorisasi file/folder",
+  
+  "thresholds": {
+    "largeFolderGB": 5,
+    "criticalUsagePct": 90,
+    "warningUsagePct": 75
+  },
+
+  "retention": {
+    "backupDays": 7,
+    "auditLogDays": 30
+  },
+
+  "categories": {
+    "safe": {
+      "description": "Aman dihapus langsung",
+      "items": [
+        {
+          "id": "user-temp",
+          "label": "User Temp Files",
+          "path": "%TEMP%",
+          "sideEffect": "Tidak ada"
+        },
+        {
+          "id": "windows-temp",
+          "label": "Windows Temp",
+          "path": "C:\\Windows\\Temp",
+          "requiresAdmin": true,
+          "sideEffect": "Tidak ada"
+        },
+        {
+          "id": "recycle-bin",
+          "label": "Recycle Bin",
+          "path": "C:\\$Recycle.Bin",
+          "sideEffect": "File tidak bisa di-restore dari Recycle Bin"
+        },
+        {
+          "id": "npm-cache",
+          "label": "npm Cache",
+          "path": "%LOCALAPPDATA%\\npm-cache",
+          "sideEffect": "Install package lebih lambat sementara"
+        },
+        {
+          "id": "pip-cache",
+          "label": "pip Cache",
+          "path": "%LOCALAPPDATA%\\pip",
+          "sideEffect": "Install package lebih lambat sementara"
+        },
+        {
+          "id": "chrome-cache",
+          "label": "Chrome Cache",
+          "path": "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cache",
+          "sideEffect": "Website loading lebih lambat sementara"
+        },
+        {
+          "id": "edge-cache",
+          "label": "Edge Cache",
+          "path": "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Cache",
+          "sideEffect": "Website loading lebih lambat sementara"
+        },
+        {
+          "id": "zoom-cache",
+          "label": "Zoom Cache",
+          "path": "%APPDATA%\\Zoom",
+          "sideEffect": "Tidak ada"
+        },
+        {
+          "id": "prefetch",
+          "label": "Windows Prefetch",
+          "path": "C:\\Windows\\Prefetch",
+          "requiresAdmin": true,
+          "sideEffect": "Boot pertama sedikit lebih lambat"
+        },
+        {
+          "id": "thumbnail-cache",
+          "label": "Thumbnail Cache",
+          "path": "%LOCALAPPDATA%\\Microsoft\\Windows\\Explorer",
+          "pattern": "thumbcache_*.db",
+          "sideEffect": "Explorer loading gambar lebih lambat sementara"
+        }
+      ]
+    },
+    "check": {
+      "description": "Perlu dicek manual oleh user",
+      "items": [
+        {
+          "id": "downloads",
+          "label": "Downloads",
+          "path": "%USERPROFILE%\\Downloads",
+          "reason": "Mungkin ada file penting",
+          "recommendation": "Cek file terbesar, hapus installer lama"
+        },
+        {
+          "id": "capcut-cache",
+          "label": "CapCut (Video Editor)",
+          "path": "%LOCALAPPDATA%\\CapCut",
+          "reason": "Project video mungkin masih dipake",
+          "recommendation": "Cek apakah ada project aktif"
+        },
+        {
+          "id": "3utools",
+          "label": "3uTools (iOS Backup)",
+          "path": "C:\\3uTools",
+          "reason": "Backup iPhone mungkin penting",
+          "recommendation": "Pastikan backup sudah tidak diperlukan"
+        },
+        {
+          "id": "windows-old",
+          "label": "Windows.old",
+          "path": "C:\\Windows.old",
+          "reason": "Backup setelah update Windows",
+          "recommendation": "Kalau hapus, tidak bisa rollback Windows update"
+        },
+        {
+          "id": "large-folders",
+          "label": "Folder Besar (> threshold)",
+          "path": "*",
+          "reason": "Tergantung konteks",
+          "recommendation": "Tampilkan nama + size, biarkan user decide"
+        }
+      ]
+    }
+  },
+
+  "whitelist": [],
+  "blacklist": []
+}
