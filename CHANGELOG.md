@@ -103,14 +103,97 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/), ve
 
 ---
 
+## [1.3.0] — 2026-05-15
+
+### Added
+- Safety & Cleanup Module:
+  - One-click cleanup dengan preview (dry-run default)
+  - Interactive confirmation workflow
+  - Progress tracking & reporting
+  - `src/cleaner/clean.ps1` — core cleanup logic
+- Backup & Restore System:
+  - `src/backup/backup.ps1` — backup before delete
+  - `src/backup/restore.ps1` — restore from backup
+  - Rollback functionality
+  - 7-day retention policy
+  - Auto-clean old backups
+- Audit Logging System:
+  - `src/audit/audit.ps1` — log semua actions
+  - Log file: `logs/audit.log`
+  - Timestamp, action, file, user tracking
+  - Searchable audit history
+- Staging Area:
+  - `src/staging/staging.ps1` — staging untuk file yang akan dihapus
+  - List staging files
+  - Restore from staging
+  - Auto-clean after 7 days
+- CLI Commands:
+  - `cleanup --preview` — preview cleanup
+  - `cleanup --execute` — execute cleanup
+  - `backup --create` — create backup
+  - `backup --restore` — restore from backup
+  - `staging --list` — list staging files
+  - `staging --restore` — restore from staging
+  - `audit --list` — list audit logs
+  - `audit --search` — search audit logs
+- Comprehensive Tests:
+  - Unit tests (`cleanup.Tests.ps1`, `backup.Tests.ps1`, `audit.Tests.ps1`, `staging.Tests.ps1`)
+  - Property tests (`cleanup.Property.Tests.ps1`, `backup.Property.Tests.ps1`, `audit.Property.Tests.ps1`, `staging.Property.Tests.ps1`)
+  - Integration tests (`cleanup-flow.Tests.ps1`, `restore-flow.Tests.ps1`)
+  - CLI tests (`cli-cleanup.Tests.ps1`, `backup-menu.Tests.ps1`, `config-retention.Tests.ps1`)
+- Kiro Specs:
+  - `.kiro/specs/safety-cleanup/` — requirements, design, tasks
+
+### Changed
+- Updated `src/ui/cli.ps1`:
+  - Add cleanup, backup, staging, audit commands
+  - Interactive menu untuk safety features
+  - Enhanced error handling
+- Updated `tests/helpers/generators.ps1`:
+  - Test data generators untuk cleanup/backup/staging
+- Updated `tests/integration/cli-menu.Tests.ps1`:
+  - CLI menu integration tests
+
+### Fixed
+- Improved error handling in backup operations
+- Fixed retention policy enforcement
+- Enhanced staging area cleanup logic
+- Better progress tracking in cleanup workflow
+
+### Security
+- Audit log untuk semua sensitive operations
+- Dry-run mode default untuk cleanup
+- Confirmation required before delete
+- 7-day retention policy untuk staging & backups
+
+---
+
 ## [Unreleased]
 
-### Planned (v1.3 — Safety & Cleanup)
-- One-click cleanup dengan preview
-- Backup & rollback functionality
-- Audit log untuk setiap action
-- Staging area untuk file yang akan dihapus
-- 7-day retention policy
+### Planned (v1.4 — Installer)
+- Build installer (.exe) untuk end-user
+- Auto-detect Windows version
+- Silent install option
+- Desktop shortcut creation
+- Auto-update mechanism
+- System integration (right-click context menu)
+
+### Planned (v2.0 — GUI Desktop App)
+- GUI desktop application (Electron/Tauri)
+- Drag & drop folder scanning
+- Real-time progress visualization
+- Export report ke PDF/Excel
+- Mobile app integration
+- Cloud sync for settings & logs
+
+---
+
+> Format entry untuk rilis mendatang:
+> ### Added — fitur baru
+> ### Changed — perubahan di fitur existing
+> ### Fixed — bug fix
+> ### Removed — fitur yang dihapus
+> ### Security — perbaikan keamanan
 
 ### Planned (v1.4 — Installer)
 - Build installer (.exe) untuk end-user
