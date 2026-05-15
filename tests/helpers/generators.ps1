@@ -393,3 +393,261 @@ function New-RandomInvalidThreshold {
 
     return (& ($strategies | Get-Random))
 }
+
+# ─── Backup Module Generators (v1.3) ────────────────────────
+
+function New-RandomSessionId {
+    <#
+    .SYNOPSIS Generates random session IDs in format YYYYMMDD-HHmmss-<6 hex>
+    .DESCRIPTION Creates valid session IDs using random dates within the past year,
+                 random times, and 6 random hex characters.
+    .OUTPUTS [string] A valid session ID string
+    #>
+    $daysAgo = Get-Random -Minimum 0 -Maximum 365
+    $date = (Get-Date).AddDays(-$daysAgo)
+    $hour = Get-Random -Minimum 0 -Maximum 24
+    $minute = Get-Random -Minimum 0 -Maximum 60
+    $second = Get-Random -Minimum 0 -Maximum 60
+    $date = $date.Date.AddHours($hour).AddMinutes($minute).AddSeconds($second)
+
+    $hexChars = '0123456789abcdef'
+    $hex = -join (1..6 | ForEach-Object { $hexChars[(Get-Random -Minimum 0 -Maximum 16)] })
+
+    return $date.ToString('yyyyMMdd-HHmmss') + "-$hex"
+}
+
+function New-RandomFileContent {
+    <#
+    .SYNOPSIS Generates random byte arrays of varying sizes
+    .DESCRIPTION Creates random binary content ranging from 1 byte to 1 MB.
+                 Uses logarithmic distribution to cover small and large sizes.
+    .PARAMETER MaxSize Maximum size in bytes (default 1MB)
+    .OUTPUTS [byte[]] Random byte array
+    #>
+    param(
+        [int]$MaxSize = 1048576
+    )
+
+    # Use logarithmic distribution for size variety
+    $logMin = 0  # 2^0 = 1 byte
+    $logMax = [Math]::Log($MaxSize, 2)
+    $logSize = (Get-Random -Minimum ($logMin * 100) -Maximum ([int]($logMax * 100))) / 100
+    $size = [Math]::Max(1, [int][Math]::Pow(2, $logSize))
+    if ($size -gt $MaxSize) { $size = $MaxSize }
+
+    $bytes = [byte[]]::new($size)
+    $rng = [System.Random]::new()
+    $rng.NextBytes($bytes)
+    return , $bytes
+}
+
+function New-RandomRetentionDays {
+    <#
+    .SYNOPSIS Generates random retention day values (1-90)
+    .DESCRIPTION Creates random integers in the valid retention range of 1 to 90 days.
+    .OUTPUTS [int] A valid retention days value
+    #>
+    return Get-Random -Minimum 1 -Maximum 91
+}
+
+function New-RandomTimestamp {
+    <#
+    .SYNOPSIS Generates random ISO 8601 timestamps
+    .DESCRIPTION Creates random timestamps spanning from 180 days in the past
+                 to the current time, formatted in ISO 8601 with timezone offset.
+    .PARAMETER DaysBack Maximum days in the past (default 180)
+    .OUTPUTS [string] An ISO 8601 formatted timestamp string
+    #>
+    param(
+        [int]$DaysBack = 180
+    )
+
+    $secondsBack = Get-Random -Minimum 0 -Maximum ($DaysBack * 86400)
+    $timestamp = (Get-Date).AddSeconds(-$secondsBack)
+    return $timestamp.ToString('yyyy-MM-ddTHH:mm:sszzz')
+}
+
+# ─── Audit Logger Generators (v1.3 Safety & Cleanup) ──────────────────────
+
+function New-RandomAuditEntry {
+    <#
+    .SYNOPSIS Generates random audit entry parameters for property-based testing
+    .DESCRIPTION Creates random combinations of valid action strings and Windows file
+                 paths containing special characters (backslashes, spaces, unicode,
+                 quotes, control characters) suitable for testing audit log serialization.
+    .OUTPUTS [PSCustomObject] with Action and FilePath properties
+    #>
+    $actions = @('delete', 'backup', 'restore', 'stage', 'auto-purge', 'purge-failed')
+
+    # Special character segments for path generation
+    $specialSegments = @(
+        'normal folder',
+        'folder with spaces',
+        'folder"with"quotes',
+        "folder`twith`ttabs",
+        'unicode_ñoño_日本語',
+        'émojis_café_naïve',
+        'path (with) parens',
+        'dots...in...name',
+        'ampersand & percent %',
+        'brackets [1] {2}',
+        'single''quote',
+        'hash#tag',
+        'dollar$sign',
+        'at@symbol',
+        'exclaim!mark',
+        'tilde~path',
+        'caret^char',
+        'plus+minus-equal=',
+        'semicolon;colon:',
+        'comma,separated'
+    )
+
+    $driveLetters = @('C', 'D')
+    $action = $actions | Get-Random
+    $drive = $driveLetters | Get-Random
+
+    # Build a path with 2-4 segments, mixing normal and special
+    $depth = Get-Random -Minimum 2 -Maximum 5
+    $pathSegments = @()
+    for ($i = 0; $i -lt $depth; $i++) {
+        $pathSegments += $specialSegments | Get-Random
+    }
+
+    # Append a filename with special chars
+    $fileNames = @(
+        'file.txt',
+        'data "backup".log',
+        'report (final).csv',
+        'résumé.docx',
+        'file with spaces.tmp',
+        'log_2024-01-01.json',
+        'café_naïve.dat'
+    )
+    $fileName = $fileNames | Get-Random
+
+    # Build path using string concatenation to avoid Join-Path drive validation
+    $filePath = "$drive`:\$($pathSegments -join '\')\$fileName"
+
+    return [PSCustomObject]@{
+        Action   = $action
+        FilePath = $filePath
+    }
+}
+
+
+# ─── Staging & Session Generators (v1.3) ──────────────────────
+
+function New-RandomSessionId {
+    <#
+    .SYNOPSIS Generates random valid session IDs
+    .DESCRIPTION Creates session IDs in the format YYYYMMDD-HHmmss-<6 hex chars>
+    .OUTPUTS [string] A valid session ID string
+    #>
+    $year = Get-Random -Minimum 2024 -Maximum 2027
+    $month = (Get-Random -Minimum 1 -Maximum 13).ToString('D2')
+    $day = (Get-Random -Minimum 1 -Maximum 29).ToString('D2')
+    $hour = (Get-Random -Minimum 0 -Maximum 24).ToString('D2')
+    $minute = (Get-Random -Minimum 0 -Maximum 60).ToString('D2')
+    $second = (Get-Random -Minimum 0 -Maximum 60).ToString('D2')
+    $hex = -join ((1..6) | ForEach-Object { '{0:x}' -f (Get-Random -Minimum 0 -Maximum 16) })
+
+    return "$year$month$day-$hour$minute$second-$hex"
+}
+
+function New-RandomFileContent {
+    <#
+    .SYNOPSIS Generates random binary content of varying sizes
+    .DESCRIPTION Creates random byte arrays suitable for writing to test files.
+    .PARAMETER MinSize Minimum size in bytes (default 1)
+    .PARAMETER MaxSize Maximum size in bytes (default 4096)
+    .OUTPUTS [byte[]] Random byte array
+    #>
+    param(
+        [int]$MinSize = 1,
+        [int]$MaxSize = 4096
+    )
+
+    $size = Get-Random -Minimum $MinSize -Maximum ($MaxSize + 1)
+    $bytes = New-Object byte[] $size
+    (New-Object System.Random).NextBytes($bytes)
+    return $bytes
+}
+
+function New-RandomBackupManifest {
+    <#
+    .SYNOPSIS Generates random backup manifest objects for property testing
+    .DESCRIPTION Creates a complete backup manifest with random session ID,
+                 creation timestamp, and a random number of file entries with
+                 valid paths, sizes, and timestamps.
+    .PARAMETER FileCount Number of files in the manifest (default: random 1-10)
+    .OUTPUTS [PSCustomObject] A backup manifest object with sessionId, createdAt, and files array
+    #>
+    param(
+        [int]$FileCount = (Get-Random -Minimum 1 -Maximum 11)
+    )
+
+    $sessionId = New-RandomSessionId
+    $createdAt = New-RandomTimestamp -DaysBack 30
+
+    $files = @()
+    for ($i = 0; $i -lt $FileCount; $i++) {
+        $originalPath = New-RandomWindowsPath
+        $fileName = "file_$(Get-Random).dat"
+        $originalPath = "$originalPath\$fileName"
+
+        # Build backup path: sessionId\drive-encoded\relative-path
+        $driveLetter = $originalPath.Substring(0, 1)
+        $relativePath = $originalPath.Substring(3)  # Skip "C:\"
+        $backupPath = "$sessionId\${driveLetter}_drive\$relativePath"
+
+        $sizeBytes = [long](Get-Random -Minimum 1024 -Maximum 107374182400)
+        $timestamp = New-RandomTimestamp -DaysBack 30
+
+        $files += [PSCustomObject]@{
+            originalPath = $originalPath
+            backupPath   = $backupPath
+            sizeBytes    = $sizeBytes
+            timestamp    = $timestamp
+        }
+    }
+
+    return [PSCustomObject]@{
+        sessionId = $sessionId
+        createdAt = $createdAt
+        files     = $files
+    }
+}
+
+function New-RandomStagedFile {
+    <#
+    .SYNOPSIS Generates random staged file metadata and content for property testing
+    .DESCRIPTION Creates a hashtable with random file path, content, and session ID
+                 suitable for staging property tests. Paths are valid Windows absolute
+                 paths with various safe characters.
+    .OUTPUTS [hashtable] @{ Path; FileName; Content; SessionId }
+    #>
+    $driveLetters = @('C', 'D', 'E')
+    $segments = @(
+        'Users', 'Documents', 'Projects', 'AppData', 'Local',
+        'Temp', 'Downloads', 'Desktop', 'Work', 'Data',
+        'Cache', 'Logs', 'Archive', 'Tools', 'Backup'
+    )
+    $extensions = @('.txt', '.log', '.dat', '.tmp', '.cache', '.bak', '.json', '.xml')
+
+    $drive = $driveLetters | Get-Random
+    $depth = Get-Random -Minimum 1 -Maximum 5
+    $subPath = ($segments | Get-Random -Count $depth) -join '\'
+    $fileName = "file_$(Get-Random)$($extensions | Get-Random)"
+    $fullPath = "$drive`:\$subPath\$fileName"
+
+    $content = New-RandomFileContent -MinSize 10 -MaxSize 2048
+    $sessionId = New-RandomSessionId
+
+    return @{
+        Path      = $fullPath
+        FileName  = $fileName
+        Content   = $content
+        SessionId = $sessionId
+    }
+}

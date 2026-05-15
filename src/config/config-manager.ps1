@@ -15,9 +15,11 @@
 $script:ConfigDir = Join-Path $env:LOCALAPPDATA 'DrivePulse'
 $script:ConfigPath = Join-Path $script:ConfigDir 'config.json'
 $script:DefaultConfig = [PSCustomObject]@{
-    Whitelist    = @()
-    Blacklist    = @()
-    LargeFolderGB = 5
+    Whitelist            = @()
+    Blacklist            = @()
+    LargeFolderGB        = 5
+    BackupRetentionDays  = 7
+    StagingRetentionDays = 7
 }
 
 # ─── Functions ──────────────────────────────────────────────
@@ -57,16 +59,20 @@ function Get-UserConfig {
     # If config file doesn't exist, create with defaults
     if (-not (Test-Path $script:ConfigPath)) {
         $defaultJson = @{
-            whitelist    = @()
-            blacklist    = @()
-            largeFolderGB = 5
+            whitelist            = @()
+            blacklist            = @()
+            largeFolderGB        = 5
+            backupRetentionDays  = 7
+            stagingRetentionDays = 7
         } | ConvertTo-Json -Depth 5
         # Write with UTF-8 encoding and 2-space indentation
         [System.IO.File]::WriteAllText($script:ConfigPath, $defaultJson, [System.Text.UTF8Encoding]::new($false))
         return [PSCustomObject]@{
-            Whitelist     = @()
-            Blacklist     = @()
-            LargeFolderGB = 5
+            Whitelist            = @()
+            Blacklist            = @()
+            LargeFolderGB        = 5
+            BackupRetentionDays  = 7
+            StagingRetentionDays = 7
         }
     }
 
@@ -78,9 +84,11 @@ function Get-UserConfig {
     catch {
         Write-Warning "⚠️ File konfigurasi rusak. Menggunakan pengaturan default."
         return [PSCustomObject]@{
-            Whitelist     = @()
-            Blacklist     = @()
-            LargeFolderGB = 5
+            Whitelist            = @()
+            Blacklist            = @()
+            LargeFolderGB        = 5
+            BackupRetentionDays  = 7
+            StagingRetentionDays = 7
         }
     }
 
@@ -123,10 +131,48 @@ function Get-UserConfig {
         }
     }
 
+    # Validate backupRetentionDays (1-90, default 7)
+    $backupRetentionDays = 7
+    if ($null -ne $parsed.backupRetentionDays) {
+        $value = $parsed.backupRetentionDays
+        if ($value -is [int] -or $value -is [long] -or ($value -is [double] -and $value -eq [math]::Floor($value))) {
+            $intValue = [int]$value
+            if ($intValue -ge 1 -and $intValue -le 90) {
+                $backupRetentionDays = $intValue
+            }
+            else {
+                Write-Warning "⚠️ Nilai backupRetentionDays tidak valid ($value). Harus antara 1-90 hari. Menggunakan default: 7 hari."
+            }
+        }
+        else {
+            Write-Warning "⚠️ Nilai backupRetentionDays tidak valid ($value). Harus berupa bilangan bulat 1-90. Menggunakan default: 7 hari."
+        }
+    }
+
+    # Validate stagingRetentionDays (1-90, default 7)
+    $stagingRetentionDays = 7
+    if ($null -ne $parsed.stagingRetentionDays) {
+        $value = $parsed.stagingRetentionDays
+        if ($value -is [int] -or $value -is [long] -or ($value -is [double] -and $value -eq [math]::Floor($value))) {
+            $intValue = [int]$value
+            if ($intValue -ge 1 -and $intValue -le 90) {
+                $stagingRetentionDays = $intValue
+            }
+            else {
+                Write-Warning "⚠️ Nilai stagingRetentionDays tidak valid ($value). Harus antara 1-90 hari. Menggunakan default: 7 hari."
+            }
+        }
+        else {
+            Write-Warning "⚠️ Nilai stagingRetentionDays tidak valid ($value). Harus berupa bilangan bulat 1-90. Menggunakan default: 7 hari."
+        }
+    }
+
     return [PSCustomObject]@{
-        Whitelist     = $whitelist
-        Blacklist     = $blacklist
-        LargeFolderGB = $largeFolderGB
+        Whitelist            = $whitelist
+        Blacklist            = $blacklist
+        LargeFolderGB        = $largeFolderGB
+        BackupRetentionDays  = $backupRetentionDays
+        StagingRetentionDays = $stagingRetentionDays
     }
 }
 
@@ -208,9 +254,31 @@ function Save-UserConfig {
 
     # Build JSON object with 2-space indentation
     $configObj = [ordered]@{
-        whitelist     = $validWhitelist
-        blacklist     = $validBlacklist
-        largeFolderGB = [math]::Round($numValue, 2)
+        whitelist            = $validWhitelist
+        blacklist            = $validBlacklist
+        largeFolderGB        = [math]::Round($numValue, 2)
+        backupRetentionDays  = 7
+        stagingRetentionDays = 7
+    }
+
+    # Include retention days if provided and valid
+    if ($null -ne $Config.BackupRetentionDays) {
+        try {
+            $brd = [int]$Config.BackupRetentionDays
+            if ($brd -ge 1 -and $brd -le 90) {
+                $configObj.backupRetentionDays = $brd
+            }
+        }
+        catch { }
+    }
+    if ($null -ne $Config.StagingRetentionDays) {
+        try {
+            $srd = [int]$Config.StagingRetentionDays
+            if ($srd -ge 1 -and $srd -le 90) {
+                $configObj.stagingRetentionDays = $srd
+            }
+        }
+        catch { }
     }
 
     try {

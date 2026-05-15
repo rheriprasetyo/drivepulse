@@ -24,12 +24,12 @@ Implement the Report & Config feature (v1.2) for DrivePulse, adding HTML/TXT rep
     - Write UTF-8 JSON with 2-space indentation
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 7.1, 7.2, 7.3, 7.4_
 
-  - [x]* 1.3 Write property tests for format utilities
+  - [x] 1.3 Write property tests for format utilities
     - **Property 4: Color Code Mapping** — verify Get-ColorCode returns correct hex for all UsagePercent 0-100
     - **Property 15: Size Formatting Consistency** — verify Format-Size and Format-SizeDetailed produce correct unit suffixes and decimal places for random byte values
     - **Validates: Requirements 2.2, 2.3, 2.4, 9.3**
 
-  - [x]* 1.4 Write property tests for config manager
+  - [x] 1.4 Write property tests for config manager
     - **Property 8: Invalid JSON Config Falls Back to Defaults** — verify random invalid JSON strings produce default config
     - **Property 9: Config Save/Load Round Trip** — verify save then load produces identical config
     - **Property 10: Config Validation** — verify invalid configs are rejected and valid configs accepted
@@ -48,7 +48,7 @@ Implement the Report & Config feature (v1.2) for DrivePulse, adding HTML/TXT rep
     - Skip non-existent blacklist paths silently
     - _Requirements: 5.1, 5.2, 5.5, 5.6, 6.1, 6.2, 6.3, 6.4, 6.5_
 
-  - [x]* 3.2 Write property tests for whitelist/blacklist filtering
+  - [x] 3.2 Write property tests for whitelist/blacklist filtering
     - **Property 11: Whitelist Path Matching** — verify items are excluded iff path matches or is subdirectory of whitelist entry (case-insensitive)
     - **Property 12: Invalid Path Entries Are Skipped** — verify invalid entries are skipped and valid entries processed
     - **Property 13: Whitelist Priority Over Blacklist** — verify whitelist wins when path is in both lists
@@ -73,7 +73,7 @@ Implement the Report & Config feature (v1.2) for DrivePulse, adding HTML/TXT rep
     - Save file as `DrivePulse-Report-{yyyy-MM-dd}.html` at OutputPath
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.8_
 
-  - [x]* 4.3 Write property tests for HTML report generation
+  - [x] 4.3 Write property tests for HTML report generation
     - **Property 1: Byte-to-GB Conversion Accuracy** — verify TOTAL_GB and USED_GB equal Round(bytes / 1073741824, 2)
     - **Property 2: Category Items Rendering Completeness** — verify all Safe and Check items appear in HTML output
     - **Property 3: Recommendations Deduplication** — verify unique recommendation count matches rendered count
@@ -91,7 +91,7 @@ Implement the Report & Config feature (v1.2) for DrivePulse, adding HTML/TXT rep
     - Use UTF-8 encoding with BOM and CRLF line endings
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9_
 
-  - [x]* 5.2 Write property tests for TXT report generation
+  - [x] 5.2 Write property tests for TXT report generation
     - **Property 6: TXT Report Items Sorted by Size Descending** — verify items within each category are in non-increasing SizeBytes order
     - **Property 7: Report Summary Totals Accuracy** — verify totals equal sum of SizeBytes per category, empty = "0 MB"
     - **Property 16: UsagePercent Display Accuracy** — verify displayed percent equals Round(UsagePercent, 1) as "X.X%"
@@ -111,7 +111,7 @@ Implement the Report & Config feature (v1.2) for DrivePulse, adding HTML/TXT rep
     - Dot-source `format-utils.ps1` and `filter.ps1` at module load
     - _Requirements: 1.5, 1.7, 3.7, 3.8_
 
-  - [x]* 7.2 Write unit tests for report generator error handling
+  - [x] 7.2 Write unit tests for report generator error handling
     - Test error returned for non-existent OutputPath
     - Test no partial file created on failure
     - Test correct filename pattern for HTML and TXT
@@ -136,7 +136,7 @@ Implement the Report & Config feature (v1.2) for DrivePulse, adding HTML/TXT rep
     - Dot-source `config-manager.ps1` and `filter.ps1`
     - _Requirements: 4.1, 5.2, 5.3, 5.4, 6.2, 7.2, 8.1_
 
-  - [x]* 8.3 Write unit tests for CLI export menu and config integration
+  - [x] 8.3 Write unit tests for CLI export menu and config integration
     - Test CLI export prompt displays correct options
     - Test CLI displays confirmation with file path on success
     - Test CLI displays error and returns to menu on failure
@@ -155,7 +155,7 @@ Implement the Report & Config feature (v1.2) for DrivePulse, adding HTML/TXT rep
     - Implement `New-RandomInvalidPath` — random strings that are not valid Windows paths
     - _Requirements: supports all property tests_
 
-  - [x]* 9.2 Write integration tests in `tests/integration/report-export.Tests.ps1`
+  - [x] 9.2 Write integration tests in `tests/integration/report-export.Tests.ps1`
     - Test full HTML report generation from mock scan data end-to-end
     - Test full TXT report generation from mock scan data end-to-end
     - Test CLI export flow with mocked user input

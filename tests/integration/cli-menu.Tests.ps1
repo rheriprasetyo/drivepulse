@@ -47,7 +47,7 @@ Describe "Integration: Menu Navigation" {
                 $script:navCount++
                 if ($script:navCount -eq 1) { return "1" }
                 if ($script:navCount -eq 2) { return "" }
-                return "4"
+                return "8"
             }
 
             $script:capturedOutput = [System.Collections.ArrayList]::new()
@@ -83,7 +83,7 @@ Describe "Integration: Menu Navigation" {
                 $script:deepNavCount++
                 if ($script:deepNavCount -eq 1) { return "2" }
                 if ($script:deepNavCount -eq 2) { return "" }
-                return "4"
+                return "8"
             }
 
             $script:capturedOutput = [System.Collections.ArrayList]::new()
@@ -106,7 +106,7 @@ Describe "Integration: Menu Navigation" {
                 $script:helpNavCount++
                 if ($script:helpNavCount -eq 1) { return "3" }
                 if ($script:helpNavCount -eq 2) { return "" }
-                return "4"
+                return "8"
             }
 
             $script:capturedOutput = [System.Collections.ArrayList]::new()
@@ -124,8 +124,8 @@ Describe "Integration: Menu Navigation" {
     }
 
     Context "Exit selection" {
-        It "Selecting '4' exits gracefully with goodbye message" {
-            Mock Read-Host { return "4" }
+        It "Selecting '8' exits gracefully with goodbye message" {
+            Mock Read-Host { return "8" }
 
             $script:capturedOutput = [System.Collections.ArrayList]::new()
             Mock Write-Host {
@@ -147,7 +147,7 @@ Describe "Integration: Invalid Input Handling" {
         Mock Read-Host {
             $script:invalidCount++
             if ($script:invalidCount -eq 1) { return "abc" }
-            return "4"
+            return "8"
         }
 
         $script:capturedOutput = [System.Collections.ArrayList]::new()
@@ -167,7 +167,7 @@ Describe "Integration: Invalid Input Handling" {
         Mock Read-Host {
             $script:oorCount++
             if ($script:oorCount -eq 1) { return "9" }
-            return "4"
+            return "8"
         }
 
         $script:capturedOutput = [System.Collections.ArrayList]::new()
@@ -187,7 +187,7 @@ Describe "Integration: Invalid Input Handling" {
         Mock Read-Host {
             $script:reCount++
             if ($script:reCount -eq 1) { return "invalid" }
-            return "4"
+            return "8"
         }
 
         $script:capturedOutput = [System.Collections.ArrayList]::new()
@@ -225,7 +225,7 @@ Describe "Integration: Dry-Run Label" {
             $script:dryRunCount++
             if ($script:dryRunCount -eq 1) { return "1" }
             if ($script:dryRunCount -eq 2) { return "" }
-            return "4"
+            return "8"
         }
 
         $script:capturedOutput = [System.Collections.ArrayList]::new()
@@ -244,7 +244,7 @@ Describe "Integration: Dry-Run Label" {
 
 Describe "Integration: Bahasa Indonesia Output" {
     It "All menu text is in Bahasa Indonesia" {
-        Mock Read-Host { return "4" }
+        Mock Read-Host { return "8" }
 
         $script:capturedOutput = [System.Collections.ArrayList]::new()
         Mock Write-Host {
@@ -281,7 +281,7 @@ Describe "Integration: Bahasa Indonesia Output" {
             $script:bahasaCount++
             if ($script:bahasaCount -eq 1) { return "1" }
             if ($script:bahasaCount -eq 2) { return "" }
-            return "4"
+            return "8"
         }
 
         $script:capturedOutput = [System.Collections.ArrayList]::new()
@@ -298,7 +298,7 @@ Describe "Integration: Bahasa Indonesia Output" {
     }
 
     It "No English-only user-facing strings in menu flow" {
-        Mock Read-Host { return "4" }
+        Mock Read-Host { return "8" }
 
         $script:capturedOutput = [System.Collections.ArrayList]::new()
         Mock Write-Host {
