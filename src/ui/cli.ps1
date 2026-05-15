@@ -6,34 +6,15 @@
     Navigasi pakai angka, output berwarna, Bahasa Indonesia.
 .NOTES
     Author: DrivePulse Team
-    Version: 1.1
+    Version: 1.2
 #>
 
 # Import modules
 . "$PSScriptRoot\..\scanner\scan.ps1"
 . "$PSScriptRoot\..\scanner\categorize.ps1"
-
-# ─── Formatting Functions ───────────────────────────────────
-
-function Format-Size {
-    <#
-    .SYNOPSIS Formats bytes to human-readable GB or MB
-    .PARAMETER Bytes Size in bytes
-    .OUTPUTS [string] Formatted size string (e.g., "2.5 GB" or "350 MB")
-    #>
-    param([long]$Bytes)
-
-    if ($Bytes -ge 1073741824) {
-        # >= 1 GB: show as X.X GB (1 decimal place)
-        $gb = [math]::Round($Bytes / 1073741824, 1)
-        return "$gb GB"
-    }
-    else {
-        # < 1 GB: show as X MB (no decimal, rounded)
-        $mb = [math]::Round($Bytes / 1048576)
-        return "$mb MB"
-    }
-}
+. "$PSScriptRoot\..\reporter\format-utils.ps1"
+. "$PSScriptRoot\..\reporter\report.ps1"
+. "$PSScriptRoot\..\config\config-manager.ps1"
 
 # ─── Drive Status Display ──────────────────────────────────
 
@@ -281,6 +262,67 @@ function Show-AdminInfoMessage {
     Write-Host ""
 }
 
+# ─── Export Menu (Task 8.1) ────────────────────────────────
+
+function Show-ExportMenu {
+    <#
+    .SYNOPSIS Displays export format prompt and generates report
+    .DESCRIPTION Prompts user to choose HTML or TXT format, invokes New-DriveReport,
+                 displays success/error message. Re-prompts up to 3 times on invalid input.
+    .PARAMETER ScanResult The DrivePulse.ScanResult object
+    .PARAMETER CategorizedItems Array of DrivePulse.CategorizedItem objects
+    #>
+    param(
+        [PSCustomObject]$ScanResult,
+        [PSCustomObject[]]$CategorizedItems
+    )
+
+    $maxAttempts = 3
+    $attempt = 0
+
+    while ($attempt -lt $maxAttempts) {
+        Write-Host ""
+        Write-Host "  Pilih format laporan:" -ForegroundColor White
+        Write-Host "  [1] HTML" -ForegroundColor White
+        Write-Host "  [2] TXT" -ForegroundColor White
+        Write-Host ""
+
+        $choice = Read-Host "  Pilih format (1-2)"
+        $attempt++
+
+        $format = $null
+        switch ($choice) {
+            "1" { $format = "HTML" }
+            "2" { $format = "TXT" }
+            default {
+                if ($attempt -lt $maxAttempts) {
+                    Write-Host "  Pilihan tidak valid. Silakan pilih 1 (HTML) atau 2 (TXT)." -ForegroundColor Red
+                }
+                else {
+                    Write-Host "  Terlalu banyak percobaan. Kembali ke menu." -ForegroundColor Red
+                }
+                continue
+            }
+        }
+
+        # Generate report
+        $outputPath = "$env:USERPROFILE\Desktop"
+        $result = New-DriveReport -ScanResult $ScanResult -CategorizedItems $CategorizedItems -Format $format -OutputPath $outputPath
+
+        if ($result.Success) {
+            Write-Host ""
+            Write-Host "  Laporan berhasil dibuat: $($result.FilePath)" -ForegroundColor Green
+            Write-Host ""
+        }
+        else {
+            Write-Host ""
+            Write-Host "  Gagal membuat laporan: $($result.Error)" -ForegroundColor Red
+            Write-Host ""
+        }
+        return
+    }
+}
+
 # ─── Main Menu (Task 6.4) ─────────────────────────────────
 
 function Show-MainMenu {
@@ -288,7 +330,11 @@ function Show-MainMenu {
     .SYNOPSIS Displays the main menu and handles user selection
     .DESCRIPTION Interactive menu loop with options for Quick Scan, Deep Scan,
                  Bantuan (Help), and Keluar (Exit). All text in Bahasa Indonesia.
+    .PARAMETER NoWhitelist If specified, skips whitelist filtering
     #>
+    param(
+        [switch]$NoWhitelist
+    )
 
     # Determine admin status
     $isAdmin = $false
@@ -300,8 +346,24 @@ function Show-MainMenu {
         $isAdmin = $false
     }
 
+    # Load user config at startup
+    $userConfig = Get-UserConfig
+
     # Rules file path (src/ui/../../config/default-rules.json = project root/config/default-rules.json)
     $rulesFile = "$PSScriptRoot\..\..\config\default-rules.json"
+
+    # Load default rules for threshold resolution
+    $defaultRules = $null
+    if (Test-Path $rulesFile) {
+        try {
+            $defaultRules = Get-Content $rulesFile -Raw | ConvertFrom-Json
+        } catch {
+            $defaultRules = $null
+        }
+    }
+
+    # Apply effective threshold
+    $effectiveThreshold = Get-EffectiveThreshold -UserConfig $userConfig -DefaultRules $defaultRules
 
     $exitMenu = $false
 
@@ -340,6 +402,11 @@ function Show-MainMenu {
                 # Initialize rules
                 $rules = Initialize-Rules -ConfigPath $rulesFile
 
+                # Override threshold from user config
+                if ($rules -and $rules.thresholds) {
+                    $rules.thresholds.largeFolderGB = $effectiveThreshold
+                }
+
                 # Define progress callback for Quick Scan
                 $progressCb = {
                     param($currentPath, $currentIndex, $totalEntries)
@@ -359,15 +426,26 @@ function Show-MainMenu {
                 # Categorize results
                 $categorized = Get-AllCategories -ScanResult $scanResult -Rules $rules -IsAdmin $isAdmin
 
+                # Apply whitelist/blacklist filtering
+                if (-not $NoWhitelist) {
+                    $categorized = Invoke-WhitelistFilter -CategorizedItems $categorized -Whitelist $userConfig.Whitelist
+                }
+                $categorized = Invoke-BlacklistEnrich -CategorizedItems $categorized -Blacklist $userConfig.Blacklist -Whitelist $userConfig.Whitelist
+
                 # Show scan results
                 Show-ScanResults -ScanResult $scanResult -CategorizedItems $categorized
 
                 # Show error summary if any
                 Show-ErrorSummary -Errors $scanResult.Errors
 
-                # Wait for user to press Enter
+                # Post-scan menu: export option
                 Write-Host ""
-                Read-Host "  Tekan Enter untuk kembali ke menu"
+                Write-Host "  [E] Ekspor laporan" -ForegroundColor White
+                Write-Host "  [Enter] Kembali ke menu" -ForegroundColor White
+                $postChoice = Read-Host "  Pilihan"
+                if ($postChoice -eq 'E' -or $postChoice -eq 'e') {
+                    Show-ExportMenu -ScanResult $scanResult -CategorizedItems $categorized
+                }
             }
             "2" {
                 # Deep Scan
@@ -377,6 +455,11 @@ function Show-MainMenu {
 
                 # Initialize rules
                 $rules = Initialize-Rules -ConfigPath $rulesFile
+
+                # Override threshold from user config
+                if ($rules -and $rules.thresholds) {
+                    $rules.thresholds.largeFolderGB = $effectiveThreshold
+                }
 
                 # Define progress callback for Deep Scan
                 $progressCb = {
@@ -396,15 +479,26 @@ function Show-MainMenu {
                 # Categorize results
                 $categorized = Get-AllCategories -ScanResult $scanResult -Rules $rules -IsAdmin $isAdmin
 
+                # Apply whitelist/blacklist filtering
+                if (-not $NoWhitelist) {
+                    $categorized = Invoke-WhitelistFilter -CategorizedItems $categorized -Whitelist $userConfig.Whitelist
+                }
+                $categorized = Invoke-BlacklistEnrich -CategorizedItems $categorized -Blacklist $userConfig.Blacklist -Whitelist $userConfig.Whitelist
+
                 # Show scan results
                 Show-ScanResults -ScanResult $scanResult -CategorizedItems $categorized
 
                 # Show error summary if any
                 Show-ErrorSummary -Errors $scanResult.Errors
 
-                # Wait for user to press Enter
+                # Post-scan menu: export option
                 Write-Host ""
-                Read-Host "  Tekan Enter untuk kembali ke menu"
+                Write-Host "  [E] Ekspor laporan" -ForegroundColor White
+                Write-Host "  [Enter] Kembali ke menu" -ForegroundColor White
+                $postChoice = Read-Host "  Pilihan"
+                if ($postChoice -eq 'E' -or $postChoice -eq 'e') {
+                    Show-ExportMenu -ScanResult $scanResult -CategorizedItems $categorized
+                }
             }
             "3" {
                 # Bantuan (Help)

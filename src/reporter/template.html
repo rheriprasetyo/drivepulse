@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DrivePulse — Laporan Analisis Drive</title>
     <style>
-        /* TODO: Styling di milestone v1.2 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             max-width: 800px;
@@ -13,42 +17,239 @@
             padding: 20px;
             background: #1a1a2e;
             color: #eee;
+            line-height: 1.6;
         }
-        .header { text-align: center; margin-bottom: 30px; }
-        .status-critical { color: #ff4757; }
-        .status-warning { color: #ffa502; }
-        .status-safe { color: #2ed573; }
-        .category-safe { border-left: 4px solid #2ed573; padding-left: 12px; }
-        .category-check { border-left: 4px solid #ffa502; padding-left: 12px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #333; }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            border-bottom: 2px solid #333;
+        }
+        .header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+        }
+        .header .date {
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+        .status-section {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .status-section h2 {
+            margin-bottom: 16px;
+            font-size: 1.3rem;
+        }
+        .drive-info {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .drive-info .info-item {
+            flex: 1;
+            min-width: 120px;
+        }
+        .drive-info .info-label {
+            color: #aaa;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+        .drive-info .info-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        .progress-bar-container {
+            background: #0f3460;
+            border-radius: 10px;
+            overflow: hidden;
+            min-height: 20px;
+            margin-top: 12px;
+        }
+        .progress-bar-fill {
+            min-height: 20px;
+            border-radius: 10px;
+            transition: width 0.3s ease;
+            width: {{USED_PCT}}%;
+            background-color: {{COLOR_CODE}};
+        }
+        .usage-percent {
+            text-align: center;
+            margin-top: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: {{COLOR_CODE}};
+        }
+        .category-section {
+            margin-bottom: 24px;
+        }
+        .category-section h2 {
+            margin-bottom: 12px;
+            font-size: 1.3rem;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .category-safe h2 {
+            border-left: 4px solid #2ed573;
+            padding-left: 12px;
+        }
+        .category-check h2 {
+            border-left: 4px solid #ffa502;
+            padding-left: 12px;
+        }
+        .empty-message {
+            color: #888;
+            font-style: italic;
+            padding: 12px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+        th {
+            background: #0f3460;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: #aaa;
+        }
+        td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        tr:hover td {
+            background: #1e2a4a;
+        }
+        .size-cell {
+            white-space: nowrap;
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+        .recommendations-section {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .recommendations-section h2 {
+            margin-bottom: 12px;
+            font-size: 1.3rem;
+            border-left: 4px solid #ffa502;
+            padding-left: 12px;
+        }
+        .recommendations-list {
+            list-style: none;
+            padding: 0;
+        }
+        .recommendations-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #2a2a4a;
+            padding-left: 20px;
+            position: relative;
+        }
+        .recommendations-list li::before {
+            content: "💡";
+            position: absolute;
+            left: 0;
+        }
+        .recommendations-list li:last-child {
+            border-bottom: none;
+        }
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 0.85rem;
+            border-top: 1px solid #333;
+            margin-top: 30px;
+        }
+
+        /* Responsive: single-column below 600px */
+        @media (max-width: 599px) {
+            body {
+                padding: 12px;
+                max-width: 100%;
+            }
+            .header h1 {
+                font-size: 1.4rem;
+            }
+            .drive-info {
+                flex-direction: column;
+                gap: 8px;
+            }
+            table {
+                font-size: 0.85rem;
+            }
+            th, td {
+                padding: 6px 8px;
+            }
+        }
+
+        /* Constrained layout 600-1200px */
+        @media (min-width: 600px) and (max-width: 1200px) {
+            body {
+                max-width: 800px;
+            }
+        }
+
+        /* Prevent horizontal scrollbar at any width 320-1200px */
+        @media (max-width: 1200px) {
+            body {
+                overflow-x: hidden;
+            }
+            table {
+                display: block;
+                overflow-x: auto;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🧹 DrivePulse — Laporan Analisis</h1>
-        <p>Tanggal: {{DATE}}</p>
+        <h1>🧹 DrivePulse — Laporan Analisis Drive</h1>
+        <p class="date">Tanggal: {{DATE}}</p>
     </div>
 
-    <section>
-        <h2>📊 Status Drive</h2>
-        <!-- TODO: Template variables akan di-replace oleh report.ps1 -->
-        <p>Drive: {{DRIVE}} | Total: {{TOTAL_GB}} GB | Terpakai: {{USED_GB}} GB ({{USED_PCT}}%)</p>
+    <section class="status-section">
+        <h2>📊 Status Drive {{DRIVE}}:</h2>
+        <div class="drive-info">
+            <div class="info-item">
+                <div class="info-label">Total Kapasitas</div>
+                <div class="info-value">{{TOTAL_GB}} GB</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Terpakai</div>
+                <div class="info-value">{{USED_GB}} GB</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Persentase</div>
+                <div class="info-value" style="color: {{COLOR_CODE}};">{{USED_PCT}}%</div>
+            </div>
+        </div>
+        <div class="progress-bar-container">
+            <div class="progress-bar-fill"></div>
+        </div>
+        <div class="usage-percent">{{USED_PCT}}% terpakai</div>
     </section>
 
-    <section>
+    <section class="category-section category-safe">
         <h2>✅ Aman Dihapus</h2>
-        <!-- {{SAFE_ITEMS}} -->
+        {{SAFE_ITEMS}}
     </section>
 
-    <section>
+    <section class="category-section category-check">
         <h2>❓ Perlu Dicek Manual</h2>
-        <!-- {{CHECK_ITEMS}} -->
+        {{CHECK_ITEMS}}
     </section>
 
-    <section>
+    <section class="recommendations-section">
         <h2>💡 Rekomendasi</h2>
-        <!-- {{RECOMMENDATIONS}} -->
+        {{RECOMMENDATIONS}}
     </section>
 
     <footer>
