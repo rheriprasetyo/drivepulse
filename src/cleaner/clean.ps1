@@ -278,18 +278,30 @@ function Start-SafeCleanup {
 
     Write-Host ""
 
-    # DRY-RUN: hanya preview, tidak eksekusi (Req 1.1, 1.3)
+    # DRY-RUN: preview dulu, lalu tanya konfirmasi (Req 1.5)
     if ($isDryRun) {
         Write-Host "  Mode: DRY-RUN - tidak ada file yang dimodifikasi." -ForegroundColor Cyan
-        return [PSCustomObject]@{
-            SessionId      = $null
-            ItemsProcessed = 0
-            SpaceFreed     = [long]0
-            Errors         = @()
-            ErrorCount     = 0
-            ElapsedSeconds = 0
-            Status         = 'dry-run'
-            Preview        = $preview
+        Write-Host ""
+        Write-Host "  Lanjutkan pembersihan $($preview.ItemCount) item ($($preview.TotalSizeFormatted))?" -ForegroundColor Yellow
+        $confirmation = Read-Host "  Ketik 'y' untuk melanjutkan ke eksekusi, 'n' untuk batal"
+
+        if ($confirmation -eq 'y' -or $confirmation -eq 'Y') {
+            # Switch dari dry-run ke execution mode (Req 1.5)
+            Write-Host "  Beralih ke mode eksekusi..." -ForegroundColor Green
+            $isDryRun = $false
+        }
+        else {
+            Write-Host "`n  Pembersihan dibatalkan (tetap dalam dry-run)." -ForegroundColor Yellow
+            return [PSCustomObject]@{
+                SessionId      = $null
+                ItemsProcessed = 0
+                SpaceFreed     = [long]0
+                Errors         = @()
+                ErrorCount     = 0
+                ElapsedSeconds = 0
+                Status         = 'dry-run'
+                Preview        = $preview
+            }
         }
     }
 
