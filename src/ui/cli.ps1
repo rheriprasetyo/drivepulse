@@ -818,7 +818,7 @@ function Show-MainMenu {
                     Show-ExportMenu -ScanResult $scanResult -CategorizedItems $categorized
                 }
                 elseif ($postChoice -eq '5') {
-                    Start-SafeCleanup -Items $categorized
+                    Start-SafeCleanup -Items $categorized -InteractiveSelect
                 }
             }
             "2" {
@@ -875,7 +875,7 @@ function Show-MainMenu {
                     Show-ExportMenu -ScanResult $scanResult -CategorizedItems $categorized
                 }
                 elseif ($postChoice -eq '5') {
-                    Start-SafeCleanup -Items $categorized
+                    Start-SafeCleanup -Items $categorized -InteractiveSelect
                 }
             }
             "3" {
@@ -968,7 +968,7 @@ function Show-MainMenu {
                     Write-Host ""
 
                     # Invoke cleanup on safe items only (Req 10.4)
-                    Start-SafeCleanup -Items $categorized
+                    Start-SafeCleanup -Items $categorized -InteractiveSelect
                 }
             }
             "6" {

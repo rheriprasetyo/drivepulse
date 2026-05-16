@@ -110,6 +110,105 @@ function Test-SafeCategory {
 
 # --- Core Functions ---
 
+function Invoke-ItemSelection {
+    <#
+    .SYNOPSIS
+        Meminta user memilih item dari preview list.
+    .DESCRIPTION
+        Support input format: "1,3,5", "1-5", "all", atau Enter kosong.
+        Return array indeks (0-based) atau $null jika batal.
+    .PARAMETER TotalItems
+        Total jumlah item yang bisa dipilih.
+    .OUTPUTS
+        [int[]] atau $null
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [int]$TotalItems
+    )
+
+    $maxRetries = 3
+    $attempt = 0
+
+    while ($attempt -lt $maxRetries) {
+        $attempt++
+        Write-Host "  Pilih item yang ingin dibersihkan (1,3,5 / 1-5 / all / Enter=batal):" -ForegroundColor Yellow
+        $input = Read-Host "  Pilihan"
+
+        # Enter kosong → batal
+        if ([string]::IsNullOrWhiteSpace($input)) {
+            return $null
+        }
+
+        # Keyword "all"
+        if ($input.Trim().ToLower() -eq 'all') {
+            return @(0..($TotalItems - 1))
+        }
+
+        $selectedIndices = @()
+        $isValid = $true
+
+        # Cek apakah format range "X-Y"
+        if ($input -match '^\s*(\d+)\s*-\s*(\d+)\s*$') {
+            $rangeStart = [int]$Matches[1]
+            $rangeEnd = [int]$Matches[2]
+
+            if ($rangeStart -gt $rangeEnd) {
+                Write-Host "  Range tidak valid: awal harus <= akhir." -ForegroundColor Red
+                $isValid = $false
+            }
+            else {
+                for ($r = $rangeStart; $r -le $rangeEnd; $r++) {
+                    if ($r -lt 1 -or $r -gt $TotalItems) {
+                        Write-Warning "  Nomor $r di luar jangkauan (1-$TotalItems), dilewati."
+                    }
+                    else {
+                        $selectedIndices += ($r - 1)
+                    }
+                }
+            }
+        }
+        else {
+            # Format comma-separated: "1,3,5"
+            $parts = $input -split ','
+            foreach ($part in $parts) {
+                $trimmed = $part.Trim()
+                if ($trimmed -match '^\d+$') {
+                    $num = [int]$trimmed
+                    if ($num -lt 1 -or $num -gt $TotalItems) {
+                        Write-Warning "  Nomor $num di luar jangkauan (1-$TotalItems), dilewati."
+                    }
+                    else {
+                        $selectedIndices += ($num - 1)
+                    }
+                }
+                else {
+                    Write-Host "  Input tidak valid: '$trimmed'. Gunakan angka, range (1-5), atau 'all'." -ForegroundColor Red
+                    $isValid = $false
+                    break
+                }
+            }
+        }
+
+        if ($isValid -and $selectedIndices.Count -gt 0) {
+            # Deduplicate dan sort
+            $selectedIndices = @($selectedIndices | Sort-Object -Unique)
+            return $selectedIndices
+        }
+
+        if ($isValid -and $selectedIndices.Count -eq 0) {
+            Write-Host "  Tidak ada item valid yang dipilih." -ForegroundColor Red
+        }
+
+        if ($attempt -lt $maxRetries) {
+            Write-Host "  Silakan coba lagi ($attempt/$maxRetries)." -ForegroundColor DarkGray
+        }
+    }
+
+    Write-Host "  Terlalu banyak percobaan. Seleksi dibatalkan." -ForegroundColor Red
+    return $null
+}
+
 function Get-CleanupPreview {
     <#
     .SYNOPSIS
@@ -211,6 +310,9 @@ function Start-SafeCleanup {
         Skip konfirmasi (untuk scripting)
     .PARAMETER SessionId
         ID session opsional. Jika tidak diberikan, akan di-generate otomatis.
+    .PARAMETER InteractiveSelect
+        Jika true, user bisa memilih item tertentu dari preview sebelum cleanup.
+        Tanpa switch ini, behavior tetap all-or-nothing (backward compatible).
     .OUTPUTS
         [PSCustomObject] CleanupResult
     #>
@@ -221,6 +323,8 @@ function Start-SafeCleanup {
         [switch]$DryRun,
 
         [switch]$Force,
+
+        [switch]$InteractiveSelect,
 
         [string]$SessionId
     )
@@ -267,7 +371,8 @@ function Start-SafeCleanup {
     for ($i = 0; $i -lt $displayCount; $i++) {
         $item = $preview.ItemList[$i]
         $truncPath = Format-TruncatedPath -Path $item.Path
-        $line = "    $truncPath - $($item.SizeFormatted) [$($item.Category)]"
+        $num = $i + 1
+        $line = "    [$num] $truncPath - $($item.SizeFormatted) [$($item.Category)]"
         Write-Host $line -ForegroundColor Gray
     }
 
@@ -277,6 +382,68 @@ function Start-SafeCleanup {
     }
 
     Write-Host ""
+
+    # Interactive Selection Mode
+    if ($InteractiveSelect) {
+        $selectedIndices = Invoke-ItemSelection -TotalItems $safeItems.Count
+
+        if ($null -eq $selectedIndices -or $selectedIndices.Count -eq 0) {
+            Write-Host "`n  Seleksi dibatalkan. Tidak ada item yang dibersihkan." -ForegroundColor Yellow
+            return [PSCustomObject]@{
+                SessionId      = $null
+                ItemsProcessed = 0
+                SpaceFreed     = [long]0
+                Errors         = @()
+                ErrorCount     = 0
+                ElapsedSeconds = 0
+                Status         = 'cancelled'
+                Preview        = $preview
+            }
+        }
+
+        # Filter safeItems berdasarkan selection
+        $selectedItems = @()
+        foreach ($idx in $selectedIndices) {
+            if ($idx -ge 0 -and $idx -lt $safeItems.Count) {
+                $selectedItems += $safeItems[$idx]
+            }
+        }
+        $safeItems = $selectedItems
+
+        # Hitung ulang ukuran untuk item yang dipilih
+        $selectedSize = [long]0
+        foreach ($si in $safeItems) {
+            if ($si.PSObject.Properties['SizeBytes']) { $selectedSize += $si.SizeBytes }
+            elseif ($si.PSObject.Properties['Size']) { $selectedSize += $si.Size }
+        }
+        $selectedSizeFormatted = Format-FileSize -Bytes $selectedSize
+
+        Write-Host ""
+        Write-Host "  Anda akan membersihkan $($safeItems.Count) item ($selectedSizeFormatted)" -ForegroundColor Cyan
+        Write-Host ""
+
+        # Konfirmasi akhir setelah selection
+        if (-not $Force) {
+            Write-Host "  Lanjutkan? (y/n)" -ForegroundColor Yellow
+            $selConfirm = Read-Host "  Ketik 'y' untuk melanjutkan"
+
+            if ($selConfirm -ne 'y' -and $selConfirm -ne 'Y') {
+                Write-Host "`n  Pembersihan dibatalkan." -ForegroundColor Yellow
+                return [PSCustomObject]@{
+                    SessionId      = $null
+                    ItemsProcessed = 0
+                    SpaceFreed     = [long]0
+                    Errors         = @()
+                    ErrorCount     = 0
+                    ElapsedSeconds = 0
+                    Status         = 'cancelled'
+                }
+            }
+        }
+
+        # Langsung ke eksekusi (skip dry-run prompt karena user sudah pilih)
+        $isDryRun = $false
+    }
 
     # DRY-RUN: preview dulu, lalu tanya konfirmasi (Req 1.5)
     if ($isDryRun) {
