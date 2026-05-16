@@ -441,8 +441,9 @@ function Start-SafeCleanup {
             }
         }
 
-        # Langsung ke eksekusi (skip dry-run prompt karena user sudah pilih)
+        # Langsung ke eksekusi (skip semua prompt konfirmasi karena user sudah pilih)
         $isDryRun = $false
+        $skipConfirmation = $true
     }
 
     # DRY-RUN: preview dulu, lalu tanya konfirmasi (Req 1.5)
@@ -472,8 +473,8 @@ function Start-SafeCleanup {
         }
     }
 
-    # Konfirmasi (kecuali -Force) (Req 2.2, 2.3, 2.4)
-    if (-not $Force) {
+    # Konfirmasi (kecuali -Force atau sudah lewat selection) (Req 2.2, 2.3, 2.4)
+    if (-not $Force -and -not $skipConfirmation) {
         Write-Host "  Lanjutkan pembersihan $($preview.ItemCount) item ($($preview.TotalSizeFormatted))?" -ForegroundColor Yellow
         $confirmation = Read-Host "  Ketik 'y' untuk melanjutkan"
 
