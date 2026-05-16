@@ -808,13 +808,17 @@ function Show-MainMenu {
                 # Show error summary if any
                 Show-ErrorSummary -Errors $scanResult.Errors
 
-                # Post-scan menu: export option
+                # Post-scan menu: export or cleanup
                 Write-Host ""
                 Write-Host "  [E] Ekspor laporan" -ForegroundColor White
+                Write-Host "  [5] Bersihkan   -- Cleanup file yang aman" -ForegroundColor White
                 Write-Host "  [Enter] Kembali ke menu" -ForegroundColor White
                 $postChoice = Read-Host "  Pilihan"
                 if ($postChoice -eq 'E' -or $postChoice -eq 'e') {
                     Show-ExportMenu -ScanResult $scanResult -CategorizedItems $categorized
+                }
+                elseif ($postChoice -eq '5') {
+                    Start-SafeCleanup -Items $categorized
                 }
             }
             "2" {
@@ -861,13 +865,17 @@ function Show-MainMenu {
                 # Show error summary if any
                 Show-ErrorSummary -Errors $scanResult.Errors
 
-                # Post-scan menu: export option
+                # Post-scan menu: export or cleanup
                 Write-Host ""
                 Write-Host "  [E] Ekspor laporan" -ForegroundColor White
+                Write-Host "  [5] Bersihkan   -- Cleanup file yang aman" -ForegroundColor White
                 Write-Host "  [Enter] Kembali ke menu" -ForegroundColor White
                 $postChoice = Read-Host "  Pilihan"
                 if ($postChoice -eq 'E' -or $postChoice -eq 'e') {
                     Show-ExportMenu -ScanResult $scanResult -CategorizedItems $categorized
+                }
+                elseif ($postChoice -eq '5') {
+                    Start-SafeCleanup -Items $categorized
                 }
             }
             "3" {
