@@ -22,6 +22,74 @@ if (Test-Path $auditPath) {
 $Script:StagingRoot = "$env:LOCALAPPDATA\DrivePulse\Staging"
 $Script:DefaultRetentionDays = 7
 
+function Remove-LongPathItem {
+    <#
+    .SYNOPSIS
+        Menghapus file/folder yang mendukung long path (>260 karakter).
+    .DESCRIPTION
+        Menggunakan Robocopy dengan empty folder trick untuk menghapus
+        folder dengan path sangat panjang yang tidak bisa ditangani
+        oleh Remove-Item biasa. Fallback ke Remove-Item jika Robocopy gagal.
+    .PARAMETER Path
+        Path absolut file/folder yang akan dihapus
+    .OUTPUTS
+        [bool] $true jika berhasil, throw exception jika gagal
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $true
+    }
+
+    $isDirectory = (Get-Item -LiteralPath $Path -Force).PSIsContainer
+
+    if ($isDirectory) {
+        # Coba Remove-Item dulu (cepat untuk folder kecil/path pendek)
+        try {
+            Remove-Item -LiteralPath $Path -Recurse -Force -Confirm:$false -ErrorAction Stop
+            return $true
+        }
+        catch {
+            # Jika gagal (biasanya karena long path), gunakan Robocopy trick
+        }
+
+        # Robocopy trick: mirror empty folder ke target, lalu hapus keduanya
+        $emptyDir = Join-Path $env:TEMP "DrivePulse_empty_$([System.Guid]::NewGuid().ToString('N'))"
+        try {
+            New-Item -Path $emptyDir -ItemType Directory -Force | Out-Null
+
+            # /MIR mirrors empty folder ke target = menghapus semua isi target
+            # /R:1 /W:1 = retry 1x, wait 1 detik
+            $robocopyArgs = @($emptyDir, $Path, '/MIR', '/R:1', '/W:1', '/NFL', '/NDL', '/NJH', '/NJS', '/NC', '/NS', '/NP')
+            $proc = Start-Process -FilePath 'robocopy.exe' -ArgumentList $robocopyArgs -NoNewWindow -Wait -PassThru
+
+            # Robocopy exit code < 8 = sukses (0-7 normal, 8+ error)
+            if ($proc.ExitCode -lt 8) {
+                # Folder sekarang kosong, hapus folder itu sendiri
+                Remove-Item -LiteralPath $Path -Force -Confirm:$false -ErrorAction SilentlyContinue
+                return $true
+            }
+            else {
+                throw "Robocopy gagal dengan exit code $($proc.ExitCode)"
+            }
+        }
+        finally {
+            # Bersihkan empty dir
+            if (Test-Path $emptyDir) {
+                Remove-Item -Path $emptyDir -Force -Confirm:$false -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    else {
+        # File biasa — gunakan LiteralPath untuk handle karakter spesial
+        Remove-Item -LiteralPath $Path -Force -Confirm:$false -ErrorAction Stop
+        return $true
+    }
+}
+
 function Get-StagingManifestPath {
     <#
     .SYNOPSIS
@@ -218,8 +286,44 @@ function Move-ToStaging {
             New-Item -Path $stagedDir -ItemType Directory -Force | Out-Null
         }
 
-        # Pindahkan file (move, bukan copy)
-        Move-Item -Path $SourcePath -Destination $stagedPath -Force
+        # Pindahkan file/folder (move, bukan copy)
+        # Untuk folder: pindahkan isi folder, bukan folder itu sendiri
+        # (beberapa folder sistem seperti $Recycle.Bin tidak bisa dipindahkan)
+        if ($fileInfo.PSIsContainer) {
+            # Folder: buat folder tujuan dan pindahkan isinya
+            if (-not (Test-Path $stagedPath)) {
+                New-Item -Path $stagedPath -ItemType Directory -Force | Out-Null
+            }
+
+            $childItems = Get-ChildItem -Path $SourcePath -Force -ErrorAction SilentlyContinue
+            $moveErrors = @()
+
+            foreach ($child in $childItems) {
+                try {
+                    Move-Item -Path $child.FullName -Destination $stagedPath -Force -ErrorAction Stop
+                }
+                catch {
+                    $moveErrors += $child.FullName
+                }
+            }
+
+            # Jika semua child gagal dipindahkan, anggap gagal
+            if ($childItems -and $moveErrors.Count -eq $childItems.Count) {
+                # Bersihkan folder staging yang sudah dibuat
+                if (Test-Path $stagedPath) {
+                    Remove-Item -Path $stagedPath -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
+                }
+                return [PSCustomObject]@{
+                    Success    = $false
+                    StagedPath = $null
+                    Error      = "Akses ditolak: tidak bisa memindahkan isi folder '$SourcePath'. Jalankan sebagai Administrator."
+                }
+            }
+        }
+        else {
+            # File biasa: langsung move
+            Move-Item -Path $SourcePath -Destination $stagedPath -Force -ErrorAction Stop
+        }
 
         # Catat metadata ke manifest
         $timestamp = Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz'
@@ -233,10 +337,13 @@ function Move-ToStaging {
             sessionId        = $SessionId
         }
 
+        # Deduplikasi: hapus entry lama dengan originalPath yang sama sebelum menambah entry baru
         $filesList = [System.Collections.ArrayList]@()
         if ($manifest.files) {
             foreach ($f in $manifest.files) {
-                [void]$filesList.Add($f)
+                if ($f.originalPath -ne $SourcePath) {
+                    [void]$filesList.Add($f)
+                }
             }
         }
         [void]$filesList.Add($entry)
@@ -312,10 +419,29 @@ function Restore-FromStaging {
 
         # Cek apakah file sudah ada di lokasi asli
         if ((Test-Path $OriginalPath) -and -not $Force) {
+            # File sudah ada di lokasi asli — hapus file staging dan entry dari manifest
+            # agar staging area tetap bersih
+            try {
+                Remove-LongPathItem -Path $stagedFullPath | Out-Null
+            }
+            catch {
+                # Non-blocking: lanjutkan bersihkan manifest meskipun hapus file gagal
+                Write-Warning "Gagal menghapus file staging: $($_.Exception.Message)"
+            }
+
+            # Hapus entry dari manifest
+            $manifest.files = @($manifest.files | Where-Object { $_.originalPath -ne $OriginalPath })
+            Save-StagingManifest -Manifest $manifest
+
+            # Catat ke audit log
+            if (Get-Command Write-AuditEntry -ErrorAction SilentlyContinue) {
+                Write-AuditEntry -Action 'restore-skipped' -FilePath $OriginalPath
+            }
+
             return [PSCustomObject]@{
-                Success      = $false
-                RestoredPath = $null
-                Error        = "File sudah ada di lokasi asli: $OriginalPath. Gunakan -Force untuk menimpa."
+                Success      = $true
+                RestoredPath = $OriginalPath
+                Error        = "File sudah ada di lokasi asli. Entry staging dibersihkan."
             }
         }
 
@@ -326,7 +452,7 @@ function Restore-FromStaging {
         }
 
         # Pindahkan file kembali ke lokasi asli
-        Move-Item -Path $stagedFullPath -Destination $OriginalPath -Force
+        Move-Item -Path $stagedFullPath -Destination $OriginalPath -Force -Confirm:$false
 
         # Hapus entry dari manifest
         $manifest.files = @($manifest.files | Where-Object { $_.originalPath -ne $OriginalPath })
@@ -419,7 +545,7 @@ function Remove-ExpiredStaged {
 
             try {
                 if (Test-Path $stagedFullPath) {
-                    Remove-Item -Path $stagedFullPath -Force -ErrorAction Stop
+                    Remove-LongPathItem -Path $stagedFullPath | Out-Null
                 }
 
                 $purgedCount++
@@ -462,6 +588,110 @@ function Remove-ExpiredStaged {
     }
 }
 
+function Clear-OrphanedStaged {
+    <#
+    .SYNOPSIS
+        Membersihkan entry staging yang orphan.
+    .DESCRIPTION
+        Mendeteksi dan menghapus entry di staging manifest di mana:
+        1. File asli sudah ada kembali di lokasi semula (orphan karena file sudah di-restore manual atau dibuat ulang)
+        2. File staging sudah tidak ada di disk (entry tanpa backing file)
+        Menghapus file staging dari disk (jika masih ada) dan menghapus entry dari manifest.
+        Mencatat setiap pembersihan ke audit log dengan action "clear-orphan".
+    .OUTPUTS
+        [PSCustomObject] @{ ClearedCount; ClearedPaths; Errors }
+    #>
+
+    $manifest = Get-StagingManifest
+    $clearedCount = 0
+    $clearedPaths = @()
+    $errors = @()
+    $remainingFiles = [System.Collections.ArrayList]@()
+
+    if (-not $manifest.files -or $manifest.files.Count -eq 0) {
+        return [PSCustomObject]@{
+            ClearedCount = 0
+            ClearedPaths = @()
+            Errors       = @()
+        }
+    }
+
+    # Deduplikasi: track originalPath yang sudah diproses
+    $seenPaths = @{}
+
+    foreach ($entry in $manifest.files) {
+        $originalPath = $entry.originalPath
+        $stagedFullPath = Join-Path $Script:StagingRoot $entry.stagedPath
+
+        # Skip duplikat — hanya pertahankan entry terbaru (manifest dibaca secara urut)
+        if ($seenPaths.ContainsKey($originalPath)) {
+            # Entry duplikat — hapus file staging jika ada
+            if (Test-Path $stagedFullPath) {
+                try {
+                    Remove-LongPathItem -Path $stagedFullPath | Out-Null
+                }
+                catch {
+                    $errors += "Gagal menghapus duplikat staged file '$originalPath': $($_.Exception.Message)"
+                }
+            }
+            $clearedCount++
+            $clearedPaths += $originalPath
+            continue
+        }
+        $seenPaths[$originalPath] = $true
+
+        $isOrphan = $false
+
+        # Cek 1: File asli sudah ada di lokasi semula
+        if (Test-Path $originalPath) {
+            $isOrphan = $true
+        }
+
+        # Cek 2: File staging tidak ada di disk
+        if (-not (Test-Path $stagedFullPath)) {
+            $isOrphan = $true
+        }
+
+        if ($isOrphan) {
+            # Hapus file staging dari disk jika masih ada
+            if (Test-Path $stagedFullPath) {
+                try {
+                    Remove-LongPathItem -Path $stagedFullPath | Out-Null
+                }
+                catch {
+                    $errorMsg = "Gagal menghapus orphan staged file '$originalPath': $($_.Exception.Message)"
+                    $errors += $errorMsg
+                    Write-Warning $errorMsg
+                    # Tetap simpan entry jika gagal hapus file
+                    [void]$remainingFiles.Add($entry)
+                    continue
+                }
+            }
+
+            $clearedCount++
+            $clearedPaths += $originalPath
+
+            # Catat ke audit log
+            if (Get-Command Write-AuditEntry -ErrorAction SilentlyContinue) {
+                Write-AuditEntry -Action 'clear-orphan' -FilePath $originalPath
+            }
+        }
+        else {
+            [void]$remainingFiles.Add($entry)
+        }
+    }
+
+    # Update manifest
+    $manifest.files = $remainingFiles.ToArray()
+    Save-StagingManifest -Manifest $manifest
+
+    return [PSCustomObject]@{
+        ClearedCount = $clearedCount
+        ClearedPaths = $clearedPaths
+        Errors       = $errors
+    }
+}
+
 function Remove-StagedFile {
     <#
     .SYNOPSIS
@@ -496,7 +726,7 @@ function Remove-StagedFile {
         $stagedFullPath = Join-Path $Script:StagingRoot $entry.stagedPath
 
         if (Test-Path $stagedFullPath) {
-            Remove-Item -Path $stagedFullPath -Force -ErrorAction Stop
+            Remove-LongPathItem -Path $stagedFullPath | Out-Null
         }
 
         # Hapus entry dari manifest

@@ -15,12 +15,6 @@
 . "$PSScriptRoot\..\reporter\format-utils.ps1"
 . "$PSScriptRoot\..\reporter\report.ps1"
 . "$PSScriptRoot\..\config\config-manager.ps1"
-
-# Import backup module for backup/restore CLI commands
-$backupModulePath = "$PSScriptRoot\..\backup\backup.ps1"
-if (Test-Path $backupModulePath) {
-    . $backupModulePath
-}
 . "$PSScriptRoot\..\cleaner\clean.ps1"
 
 # ─── Drive Status Display ──────────────────────────────────
@@ -330,7 +324,7 @@ function Show-ExportMenu {
     }
 }
 
-# ─── Staging Menu (Task 7.3) ───────────────────────────────
+# ─── Storage Menu (Penyimpanan) ────────────────────────────
 
 function Format-StagingSize {
     <#
@@ -357,30 +351,34 @@ function Format-StagingSize {
     }
 }
 
-function Show-StagingMenu {
+function Show-StorageMenu {
     <#
-    .SYNOPSIS Displays staging area management menu
-    .DESCRIPTION Lists staged files, allows restore or permanent delete.
-                 All text in Bahasa Indonesia.
+    .SYNOPSIS Menampilkan menu penyimpanan (staging) — restore atau hapus permanen
+    .DESCRIPTION Menu interaktif untuk melihat file di staging area,
+                 restore ke lokasi asli, atau hapus permanen.
+                 Semua teks dalam Bahasa Indonesia.
     .NOTES Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6
     #>
 
     Write-Host ""
-    Write-Host "  === Staging Area ===" -ForegroundColor Cyan
+    Write-Host "  === Penyimpanan (Staging) ===" -ForegroundColor Cyan
     Write-Host ""
 
     # Get staged files
-    $stagedFiles = @(Get-StagedFiles)
+    $stagedFiles = @()
+    if (Get-Command Get-StagedFiles -ErrorAction SilentlyContinue) {
+        $stagedFiles = @(Get-StagedFiles)
+    }
 
     # Handle empty staging state (Req 12.4)
     if ($stagedFiles.Count -eq 0) {
-        Write-Host "  Staging area kosong. Tidak ada file yang ditahan." -ForegroundColor Gray
+        Write-Host "  Penyimpanan kosong. Tidak ada file yang ditahan." -ForegroundColor Gray
         Write-Host ""
         return
     }
 
     # Display numbered list of staged files (Req 12.1)
-    Write-Host "  File dalam staging:" -ForegroundColor White
+    Write-Host "  File dalam penyimpanan:" -ForegroundColor White
     Write-Host ""
 
     for ($i = 0; $i -lt $stagedFiles.Count; $i++) {
@@ -420,7 +418,7 @@ function Show-StagingMenu {
         $result = Restore-FromStaging -OriginalPath $selectedFile.originalPath
 
         if ($result.Success) {
-            Write-Host "  File berhasil dikembalikan ke: $($selectedFile.originalPath)" -ForegroundColor Green
+            Write-Host "  ✅ File berhasil dikembalikan ke: $($selectedFile.originalPath)" -ForegroundColor Green
         }
         else {
             # Handle conflict error (Req 12.6)
@@ -454,7 +452,7 @@ function Show-StagingMenu {
             $result = Remove-StagedFile -OriginalPath $selectedFile.originalPath
 
             if ($result.Success) {
-                Write-Host "  File berhasil dihapus permanen." -ForegroundColor Green
+                Write-Host "  🗑️ File berhasil dihapus permanen." -ForegroundColor Green
             }
             else {
                 Write-Host "  Gagal menghapus: $($result.Error)" -ForegroundColor Red
@@ -469,223 +467,6 @@ function Show-StagingMenu {
 
     # Invalid input
     Write-Host "  Pilihan tidak valid." -ForegroundColor Red
-    Write-Host ""
-}
-
-# ─── Backup Menu (Task 7.2) ────────────────────────────────
-
-function Show-BackupMenu {
-    <#
-    .SYNOPSIS Menampilkan menu backup dan menangani restore
-    .DESCRIPTION Menu interaktif untuk melihat daftar backup, restore file individual,
-                 atau restore seluruh session. Semua teks dalam Bahasa Indonesia.
-    .NOTES
-        Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7
-    #>
-
-    Write-Host ""
-    Write-Host "  === Kelola Backup ===" -ForegroundColor Cyan
-    Write-Host ""
-
-    # Ambil semua backup yang tersedia
-    $backups = @()
-    if (Get-Command Get-AvailableBackups -ErrorAction SilentlyContinue) {
-        $backups = @(Get-AvailableBackups)
-    }
-
-    # Handle empty backup state (Req 11.4)
-    if ($backups.Count -eq 0) {
-        Write-Host "  Tidak ada backup yang tersedia." -ForegroundColor Yellow
-        Write-Host ""
-        return
-    }
-
-    # Group backups by SessionId (Req 11.1)
-    $sessions = $backups | Group-Object -Property SessionId
-
-    # Build flat numbered list of files and session index
-    $fileList = @()
-    $sessionIndex = @{}
-    $sessionNumber = 0
-    $fileNumber = 0
-
-    foreach ($sessionGroup in $sessions) {
-        $sessionNumber++
-        $sessionId = $sessionGroup.Name
-        $sessionFiles = $sessionGroup.Group
-        $createdAt = $sessionFiles[0].CreatedAt
-
-        $sessionIndex[$sessionNumber] = @{
-            SessionId = $sessionId
-            Files     = $sessionFiles
-        }
-
-        Write-Host "  Session $sessionNumber`: $sessionId ($createdAt)" -ForegroundColor White
-        Write-Host ""
-
-        foreach ($file in $sessionFiles) {
-            $fileNumber++
-            $sizeFormatted = Format-BackupSize -Bytes $file.SizeBytes
-            $displayPath = $file.OriginalPath
-            if ($displayPath.Length -gt 60) {
-                $displayPath = $displayPath.Substring(0, 57) + '...'
-            }
-            Write-Host "    [$fileNumber] $displayPath - $sizeFormatted - $($file.Timestamp)" -ForegroundColor Gray
-
-            $fileList += [PSCustomObject]@{
-                Number       = $fileNumber
-                OriginalPath = $file.OriginalPath
-                BackupPath   = $file.BackupPath
-                SizeBytes    = $file.SizeBytes
-                SessionId    = $sessionId
-                SessionNum   = $sessionNumber
-            }
-        }
-        Write-Host ""
-    }
-
-    # Prompt user (Req 11.2, 11.3, 11.5)
-    Write-Host "  Pilih nomor file untuk restore, atau 'S<nomor>' untuk restore seluruh session, atau 'K' untuk kembali" -ForegroundColor White
-    Write-Host ""
-    $input = Read-Host "  Pilihan"
-
-    # Handle kembali
-    if ([string]::IsNullOrWhiteSpace($input) -or $input -eq 'K' -or $input -eq 'k') {
-        return
-    }
-
-    # Handle restore seluruh session (Req 11.3)
-    if ($input -match '^[Ss](\d+)$') {
-        $sessNum = [int]$Matches[1]
-
-        if (-not $sessionIndex.ContainsKey($sessNum)) {
-            Write-Host "  Nomor session tidak valid." -ForegroundColor Red
-            Write-Host ""
-            return
-        }
-
-        $targetSession = $sessionIndex[$sessNum]
-        Write-Host ""
-        Write-Host "  Memulai restore seluruh session: $($targetSession.SessionId)..." -ForegroundColor Green
-
-        $result = $null
-        try {
-            $result = Restore-FromBackup -SessionId $targetSession.SessionId -All -Force
-        }
-        catch {
-            Write-Host "  Gagal melakukan restore: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host ""
-            return
-        }
-
-        # Display restore summary or errors (Req 11.6, 11.7)
-        Show-RestoreSummary -Result $result
-        return
-    }
-
-    # Handle restore file individual (Req 11.2)
-    if ($input -match '^\d+$') {
-        $fileNum = [int]$input
-
-        $targetFile = $fileList | Where-Object { $_.Number -eq $fileNum }
-        if (-not $targetFile) {
-            Write-Host "  Nomor file tidak valid." -ForegroundColor Red
-            Write-Host ""
-            return
-        }
-
-        Write-Host ""
-        Write-Host "  Memulai restore: $($targetFile.OriginalPath)..." -ForegroundColor Green
-
-        $result = $null
-        try {
-            $result = Restore-FromBackup -BackupPath $targetFile.OriginalPath -Force
-        }
-        catch {
-            Write-Host "  Gagal melakukan restore: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host ""
-            return
-        }
-
-        # Display restore summary or errors (Req 11.6, 11.7)
-        Show-RestoreSummary -Result $result
-        return
-    }
-
-    # Input tidak valid
-    Write-Host "  Pilihan tidak valid." -ForegroundColor Red
-    Write-Host ""
-}
-
-function Format-BackupSize {
-    <#
-    .SYNOPSIS Memformat ukuran bytes ke format yang mudah dibaca
-    .PARAMETER Bytes Ukuran dalam bytes
-    .OUTPUTS [string] Ukuran terformat (B, KB, MB, GB)
-    #>
-    param([long]$Bytes)
-
-    if ($Bytes -ge 1GB) {
-        return '{0:N2} GB' -f ($Bytes / 1GB)
-    }
-    elseif ($Bytes -ge 1MB) {
-        return '{0:N2} MB' -f ($Bytes / 1MB)
-    }
-    elseif ($Bytes -ge 1KB) {
-        return '{0:N2} KB' -f ($Bytes / 1KB)
-    }
-    else {
-        return "$Bytes B"
-    }
-}
-
-function Show-RestoreSummary {
-    <#
-    .SYNOPSIS Menampilkan ringkasan hasil restore
-    .DESCRIPTION Menampilkan jumlah file berhasil, ukuran total, dan error jika ada.
-                 Semua teks dalam Bahasa Indonesia.
-    .PARAMETER Result Objek hasil dari Restore-FromBackup
-    #>
-    param(
-        [PSCustomObject]$Result
-    )
-
-    Write-Host ""
-
-    if ($null -eq $Result) {
-        Write-Host "  Gagal melakukan restore: hasil tidak tersedia." -ForegroundColor Red
-        Write-Host ""
-        return
-    }
-
-    # Handle errors (Req 11.7)
-    if ($Result.Errors -and $Result.Errors.Count -gt 0) {
-        foreach ($err in $Result.Errors) {
-            # Detect error type and display appropriate message
-            if ($err -match 'sudah ada|already exists|conflict') {
-                Write-Host "  Konflik: File sudah ada di lokasi asli." -ForegroundColor Red
-            }
-            elseif ($err -match 'akses|permission|denied|izin') {
-                Write-Host "  Error: Izin akses ditolak." -ForegroundColor Red
-            }
-            elseif ($err -match 'ruang|space|disk') {
-                Write-Host "  Error: Ruang disk tidak mencukupi." -ForegroundColor Red
-            }
-            else {
-                Write-Host "  Error: $err" -ForegroundColor Red
-            }
-        }
-    }
-
-    # Display success summary (Req 11.6)
-    if ($Result.RestoredCount -gt 0) {
-        $sizeFormatted = Format-BackupSize -Bytes $Result.TotalSize
-        Write-Host "  Berhasil: $($Result.RestoredCount) file ($sizeFormatted)" -ForegroundColor Green
-    }
-    elseif ($Result.Errors.Count -eq 0) {
-        Write-Host "  Tidak ada file yang di-restore." -ForegroundColor Yellow
-    }
-
     Write-Host ""
 }
 
@@ -748,13 +529,12 @@ function Show-MainMenu {
         Write-Host "  [3] Bantuan     -- Cara pakai DrivePulse" -ForegroundColor White
         Write-Host "  [4] Ekspor      -- Ekspor laporan scan" -ForegroundColor White
         Write-Host "  [5] Bersihkan   -- Cleanup file yang aman (dry-run dulu)" -ForegroundColor White
-        Write-Host "  [6] Backup      -- Kelola backup & restore" -ForegroundColor White
-        Write-Host "  [7] Staging     -- Lihat & kelola file staging" -ForegroundColor White
-        Write-Host "  [8] Keluar      -- Tutup aplikasi" -ForegroundColor White
+        Write-Host "  [6] Penyimpanan -- Kelola file staging (restore/hapus)" -ForegroundColor White
+        Write-Host "  [7] Keluar      -- Tutup aplikasi" -ForegroundColor White
         Write-Host ""
 
         # Read user input
-        $choice = Read-Host "  Pilih menu (1-8)"
+        $choice = Read-Host "  Pilih menu (1-7)"
 
         # Handle null/empty input (non-interactive or piped input exhausted)
         if ([string]::IsNullOrWhiteSpace($choice)) {
@@ -972,14 +752,10 @@ function Show-MainMenu {
                 }
             }
             "6" {
-                # Backup
-                Show-BackupMenu
+                # Penyimpanan (Staging)
+                Show-StorageMenu
             }
             "7" {
-                # Staging
-                Show-StagingMenu
-            }
-            "8" {
                 # Keluar (Exit)
                 Write-Host ""
                 Write-Host "  Terima kasih sudah pakai DrivePulse! Sampai jumpa." -ForegroundColor Green
@@ -989,7 +765,7 @@ function Show-MainMenu {
             default {
                 # Invalid input
                 Write-Host ""
-                Write-Host "  Pilihan tidak valid. Silakan pilih 1-8." -ForegroundColor Red
+                Write-Host "  Pilihan tidak valid. Silakan pilih 1-7." -ForegroundColor Red
                 Write-Host ""
             }
         }

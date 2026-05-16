@@ -2,8 +2,8 @@
 .SYNOPSIS
     DrivePulse — Audit Logger Module
 .DESCRIPTION
-    Mencatat semua aksi (delete, backup, restore, stage, auto-purge, purge-failed)
-    ke file audit log dalam format JSON single-line (JSONL).
+    Mencatat semua aksi (delete, backup, restore, stage, auto-purge, purge-failed,
+    restore-skipped, clear-orphan) ke file audit log dalam format JSON single-line (JSONL).
     Mendukung append-only writes, flush-to-disk, rotasi log (10 MB), dan
     encoding UTF-8 tanpa BOM.
 .NOTES
@@ -66,13 +66,13 @@ function Write-AuditEntry {
         timestamp (ISO 8601), action, file, user.
         Mendukung rotasi log (10 MB), flush-to-disk, dan proper JSON escaping (RFC 8259).
     .PARAMETER Action
-        Tipe aksi: delete, backup, restore, stage, auto-purge, purge-failed
+        Tipe aksi: delete, backup, restore, stage, auto-purge, purge-failed, restore-skipped, clear-orphan
     .PARAMETER FilePath
         Path absolut file yang terpengaruh
     #>
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('delete', 'backup', 'restore', 'stage', 'auto-purge', 'purge-failed')]
+        [ValidateSet('delete', 'backup', 'restore', 'stage', 'auto-purge', 'purge-failed', 'restore-skipped', 'clear-orphan')]
         [string]$Action,
 
         [Parameter(Mandatory)]

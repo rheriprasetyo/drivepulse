@@ -3,7 +3,7 @@
     DrivePulse - Cleanup Execution Module (Orchestrator)
 .DESCRIPTION
     Orkestrasi pembersihan file/folder yang dikategorikan aman.
-    Alur: dry-run preview > konfirmasi > purge expired > backup > stage > progress > summary.
+    Alur: dry-run preview > konfirmasi > purge expired > stage > progress > summary.
     Default mode adalah DRY-RUN (tidak ada modifikasi filesystem).
     Hanya memproses item dengan kategori "Safe" atau "Aman Dihapus".
 .NOTES
@@ -16,11 +16,6 @@
 $auditPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'audit\audit.ps1'
 if (Test-Path $auditPath) {
     . $auditPath
-}
-
-$backupModulePath = Join-Path (Split-Path -Parent $PSScriptRoot) 'backup\backup.ps1'
-if (Test-Path $backupModulePath) {
-    . $backupModulePath
 }
 
 $stagingModulePath = Join-Path (Split-Path -Parent $PSScriptRoot) 'staging\staging.ps1'
@@ -200,7 +195,7 @@ function Start-SafeCleanup {
         Menjalankan proses pembersihan yang aman.
     .DESCRIPTION
         Orkestrasi lengkap: dry-run preview > konfirmasi > purge expired >
-        backup > stage > progress > summary.
+        stage > progress > summary.
         Default mode adalah DRY-RUN (tidak ada modifikasi filesystem).
         Hanya memproses item dengan kategori "Safe" atau "Aman Dihapus".
     .PARAMETER Items
@@ -262,12 +257,13 @@ function Start-SafeCleanup {
     Write-Host "  Total ukuran: $($preview.TotalSizeFormatted) ($($preview.TotalSize) bytes)" -ForegroundColor White
     Write-Host ""
 
-    # Tampilkan detail per-item (maks 1000) (Req 1.2)
+    # Tampilkan detail per-item dengan nomor (maks 1000) (Req 1.2)
     $displayCount = [Math]::Min($preview.ItemList.Count, 1000)
     for ($i = 0; $i -lt $displayCount; $i++) {
         $item = $preview.ItemList[$i]
         $truncPath = Format-TruncatedPath -Path $item.Path
-        $line = "    $truncPath - $($item.SizeFormatted) [$($item.Category)]"
+        $num = $i + 1
+        $line = "    [$num] $truncPath - $($item.SizeFormatted) [$($item.Category)]"
         Write-Host $line -ForegroundColor Gray
     }
 
@@ -282,16 +278,64 @@ function Start-SafeCleanup {
     if ($isDryRun) {
         Write-Host "  Mode: DRY-RUN - tidak ada file yang dimodifikasi." -ForegroundColor Cyan
         Write-Host ""
-        Write-Host "  Lanjutkan pembersihan $($preview.ItemCount) item ($($preview.TotalSizeFormatted))?" -ForegroundColor Yellow
-        $confirmation = Read-Host "  Ketik 'y' untuk melanjutkan ke eksekusi, 'n' untuk batal"
+        Write-Host "  Pilihan:" -ForegroundColor Yellow
+        Write-Host "    [a] Bersihkan semua item" -ForegroundColor White
+        Write-Host "    [s] Pilih item tertentu (masukkan nomor, pisah koma)" -ForegroundColor White
+        Write-Host "    [n] Batal" -ForegroundColor White
+        Write-Host ""
+        $confirmation = Read-Host "  Ketik pilihan (a/s/n)"
 
-        if ($confirmation -eq 'y' -or $confirmation -eq 'Y') {
-            # Switch dari dry-run ke execution mode (Req 1.5)
+        if ($confirmation -eq 'a' -or $confirmation -eq 'A' -or $confirmation -eq 'y' -or $confirmation -eq 'Y') {
+            # Lanjutkan dengan semua item
+            Write-Host "  Beralih ke mode eksekusi (semua item)..." -ForegroundColor Green
+            $isDryRun = $false
+        }
+        elseif ($confirmation -eq 's' -or $confirmation -eq 'S') {
+            # User memilih item tertentu
+            Write-Host ""
+            $selection = Read-Host "  Masukkan nomor item (pisah koma, contoh: 1,3,5)"
+
+            # Parse nomor yang dipilih
+            $selectedIndices = @()
+            foreach ($part in ($selection -split ',')) {
+                $trimmed = $part.Trim()
+                $num = 0
+                if ([int]::TryParse($trimmed, [ref]$num)) {
+                    if ($num -ge 1 -and $num -le $safeItems.Count) {
+                        $selectedIndices += ($num - 1)  # Convert ke 0-based index
+                    }
+                    else {
+                        Write-Warning "  Nomor '$num' di luar jangkauan (1-$($safeItems.Count)), dilewati."
+                    }
+                }
+            }
+
+            if ($selectedIndices.Count -eq 0) {
+                Write-Host "`n  Tidak ada item valid yang dipilih. Pembersihan dibatalkan." -ForegroundColor Yellow
+                return [PSCustomObject]@{
+                    SessionId      = $null
+                    ItemsProcessed = 0
+                    SpaceFreed     = [long]0
+                    Errors         = @()
+                    ErrorCount     = 0
+                    ElapsedSeconds = 0
+                    Status         = 'cancelled'
+                }
+            }
+
+            # Filter safeItems berdasarkan pilihan user
+            $safeItems = @($selectedIndices | ForEach-Object { $safeItems[$_] })
+
+            # Recalculate preview untuk item terpilih
+            $preview = Get-CleanupPreview -Items $safeItems
+
+            Write-Host ""
+            Write-Host "  Item terpilih: $($safeItems.Count) ($($preview.TotalSizeFormatted))" -ForegroundColor Green
             Write-Host "  Beralih ke mode eksekusi..." -ForegroundColor Green
             $isDryRun = $false
         }
         else {
-            Write-Host "`n  Pembersihan dibatalkan (tetap dalam dry-run)." -ForegroundColor Yellow
+            Write-Host "`n  Pembersihan dibatalkan." -ForegroundColor Yellow
             return [PSCustomObject]@{
                 SessionId      = $null
                 ItemsProcessed = 0
@@ -304,13 +348,58 @@ function Start-SafeCleanup {
             }
         }
     }
+    # Konfirmasi hanya jika BUKAN dari dry-run flow (langsung eksekusi tanpa dry-run)
+    # dan bukan -Force (Req 2.2, 2.3, 2.4)
+    elseif (-not $Force) {
+        Write-Host "  Pilihan:" -ForegroundColor Yellow
+        Write-Host "    [a] Bersihkan semua item" -ForegroundColor White
+        Write-Host "    [s] Pilih item tertentu (masukkan nomor, pisah koma)" -ForegroundColor White
+        Write-Host "    [n] Batal" -ForegroundColor White
+        Write-Host ""
+        $confirmation = Read-Host "  Ketik pilihan (a/s/n)"
 
-    # Konfirmasi (kecuali -Force) (Req 2.2, 2.3, 2.4)
-    if (-not $Force) {
-        Write-Host "  Lanjutkan pembersihan $($preview.ItemCount) item ($($preview.TotalSizeFormatted))?" -ForegroundColor Yellow
-        $confirmation = Read-Host "  Ketik 'y' untuk melanjutkan"
+        if ($confirmation -eq 'a' -or $confirmation -eq 'A' -or $confirmation -eq 'y' -or $confirmation -eq 'Y') {
+            # Lanjutkan dengan semua item
+            Write-Host "  Melanjutkan pembersihan semua item..." -ForegroundColor Green
+        }
+        elseif ($confirmation -eq 's' -or $confirmation -eq 'S') {
+            Write-Host ""
+            $selection = Read-Host "  Masukkan nomor item (pisah koma, contoh: 1,3,5)"
 
-        if ($confirmation -ne 'y' -and $confirmation -ne 'Y') {
+            $selectedIndices = @()
+            foreach ($part in ($selection -split ',')) {
+                $trimmed = $part.Trim()
+                $num = 0
+                if ([int]::TryParse($trimmed, [ref]$num)) {
+                    if ($num -ge 1 -and $num -le $safeItems.Count) {
+                        $selectedIndices += ($num - 1)
+                    }
+                    else {
+                        Write-Warning "  Nomor '$num' di luar jangkauan (1-$($safeItems.Count)), dilewati."
+                    }
+                }
+            }
+
+            if ($selectedIndices.Count -eq 0) {
+                Write-Host "`n  Tidak ada item valid yang dipilih. Pembersihan dibatalkan." -ForegroundColor Yellow
+                return [PSCustomObject]@{
+                    SessionId      = $null
+                    ItemsProcessed = 0
+                    SpaceFreed     = [long]0
+                    Errors         = @()
+                    ErrorCount     = 0
+                    ElapsedSeconds = 0
+                    Status         = 'cancelled'
+                }
+            }
+
+            $safeItems = @($selectedIndices | ForEach-Object { $safeItems[$_] })
+            $preview = Get-CleanupPreview -Items $safeItems
+
+            Write-Host ""
+            Write-Host "  Item terpilih: $($safeItems.Count) ($($preview.TotalSizeFormatted))" -ForegroundColor Green
+        }
+        else {
             Write-Host "`n  Pembersihan dibatalkan." -ForegroundColor Yellow
             return [PSCustomObject]@{
                 SessionId      = $null
@@ -331,17 +420,8 @@ function Start-SafeCleanup {
 
     Write-Host "`n  Memulai pembersihan (Session: $SessionId)..." -ForegroundColor Green
 
-    # Purge expired backups dan staging (Req 4.7, 9.2)
-    Write-Host "  Membersihkan backup dan staging yang kedaluwarsa..." -ForegroundColor DarkGray
-    try {
-        if (Get-Command Remove-ExpiredBackups -ErrorAction SilentlyContinue) {
-            Remove-ExpiredBackups | Out-Null
-        }
-    }
-    catch {
-        Write-Warning "  Gagal membersihkan backup kedaluwarsa: $($_.Exception.Message)"
-    }
-
+    # Purge expired staging (Req 9.2)
+    Write-Host "  Membersihkan staging yang kedaluwarsa..." -ForegroundColor DarkGray
     try {
         if (Get-Command Remove-ExpiredStaged -ErrorAction SilentlyContinue) {
             Remove-ExpiredStaged | Out-Null
@@ -351,7 +431,7 @@ function Start-SafeCleanup {
         Write-Warning "  Gagal membersihkan staging kedaluwarsa: $($_.Exception.Message)"
     }
 
-    # Proses setiap item: backup > stage > progress (Req 3.1, 3.2, 3.4, 3.5)
+    # Proses setiap item: stage > progress (Req 3.1, 3.2, 3.4, 3.5)
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $itemsProcessed = 0
     $spaceFreed = [long]0
@@ -371,17 +451,7 @@ function Start-SafeCleanup {
         }
 
         try {
-            # 1. Backup file
-            if (Get-Command Backup-BeforeDelete -ErrorAction SilentlyContinue) {
-                $backupResult = Backup-BeforeDelete -SourcePath $itemPath -SessionId $SessionId
-                if (-not $backupResult.Success) {
-                    $errors += "Backup gagal untuk '$itemPath': $($backupResult.Error)"
-                    Write-Warning "  Melewati item (backup gagal): $itemPath"
-                    continue
-                }
-            }
-
-            # 2. Stage file (move to staging area)
+            # 1. Stage file (move to staging area)
             if (Get-Command Move-ToStaging -ErrorAction SilentlyContinue) {
                 $stageResult = Move-ToStaging -SourcePath $itemPath -SessionId $SessionId
                 if (-not $stageResult.Success) {
@@ -391,11 +461,11 @@ function Start-SafeCleanup {
                 }
             }
 
-            # 3. Item berhasil diproses
+            # 2. Item berhasil diproses
             $itemsProcessed++
             $spaceFreed += $itemSize
 
-            # 4. Tampilkan progress (Req 3.1, 3.2, 3.5)
+            # 3. Tampilkan progress (Req 3.1, 3.2, 3.5)
             Show-CleanupProgress -CurrentPath $itemPath -CurrentIndex $i -TotalItems $safeItems.Count -SpaceFreedSoFar $spaceFreed
         }
         catch {
@@ -430,6 +500,15 @@ function Start-SafeCleanup {
     if ($errors.Count -gt 0) { $errorColor = 'Red' }
     Write-Host "  Error         : $($errors.Count)" -ForegroundColor $errorColor
     Write-Host "  Waktu         : $elapsedSeconds detik" -ForegroundColor White
+
+    $expiryDate = (Get-Date).AddDays(7).ToString("dd MMMM yyyy")
+    Write-Host ""
+    Write-Host "  [!] FILE ADA DI PENYIMPANAN (STAGING) SELAMA 7 HARI" -ForegroundColor Yellow
+    Write-Host "     Lewat menu [6] Penyimpanan kamu bisa:" -ForegroundColor White
+    Write-Host "       [v] Restore file kalo nyesal" -ForegroundColor Gray
+    Write-Host "       [x] Hapus permanen kalo udah yakin" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  [i] File akan otomatis terhapus permanen: $expiryDate" -ForegroundColor Cyan
     Write-Host ""
 
     return [PSCustomObject]@{
